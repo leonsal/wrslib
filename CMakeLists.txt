@@ -48,8 +48,10 @@ CPMAddPackage(
 
 set(SOURCES
     include/wrc.h
-    src/wrc.c
+    src/server.c
     src/rpc.c
+    src/rpc_codec.h
+    src/rpc_codec.c
 )
 
 add_library(wrc ${SOURCES})
