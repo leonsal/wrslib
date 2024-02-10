@@ -36,7 +36,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     wrs->cfg = *cfg;
     wrs->pool_alloc = pool_alloc;
     wrs->alloc = alloc;
-    //wrs->rpc_handlers = map_rpc_init(alloc, 17);
+    wrs->rpc_handlers = map_rpc_init(alloc, 0);
     assert(pthread_mutex_init(&wrs->lock, NULL) == 0);
 
     // If configured listening port is 0, finds an unused port

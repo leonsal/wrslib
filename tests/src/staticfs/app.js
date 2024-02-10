@@ -3,7 +3,7 @@
 //
 import {RPC} from "./rpc.js";
 
-const RPC_URL = "/rpc";
+const RPC_URL = "/rpc1";
 
 // Creates RPC manager for
 const rpc = new RPC(RPC_URL);

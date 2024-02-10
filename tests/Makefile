@@ -142,7 +142,7 @@ d: all
 #
 .PHONY: r
 r: all
-> ./test
+> ./tests
 
 #
 # Show help target

@@ -64,7 +64,7 @@ typedef struct RpcClient {
 #include "cx_array.h"
 
 // WebSocket RPC handler state
-typedef struct RpcHandler {
+typedef struct WrsRpc {
     Wrs*                wrs;            // Associated server
     const char*         url;            // This websocket handler URL
     uint32_t            max_conns;      // Maximum number of connection
@@ -73,15 +73,15 @@ typedef struct RpcHandler {
     pthread_mutex_t     lock;           // Mutex for exclusive access to this struct
     map_bind            binds;          // Map remote name to local bind info
     WrsEventCallback    evcb;           // Optional user event callback
-} RpcHandler;
+} WrsRpc;
 
 
 // Forward declaration of local functions
 static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_data);
 static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data);
 static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t dataSize, void *user_data);
-static int wrs_rpc_call_handler(RpcHandler* rpc, RpcClient* client, size_t connid, const CxVar* rxmsg);
-static int wrs_rpc_response_handler(RpcHandler* rpc, RpcClient* client, size_t connid, const CxVar* msg);
+static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* rxmsg);
+static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* msg);
 static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_data);
 
 // Define websocket sub-protocols
@@ -94,9 +94,15 @@ static struct mg_websocket_subprotocols wsprot = {2, subprotocols};
 
 WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallback cb) {
 
+    // Checks if there is already a handler for this url
+    WrsRpc** phandler = map_rpc_get(&wrs->rpc_handlers, url);
+    if (phandler != NULL) {
+        return NULL;
+    }
+
     // Creates and initializes the new RPC handler state
-    RpcHandler* handler = cx_alloc_malloc(wrs->alloc, sizeof(RpcHandler));
-    *handler = (RpcHandler) {
+    WrsRpc* handler = cx_alloc_malloc(wrs->alloc, sizeof(WrsRpc));
+    *handler = (WrsRpc) {
         .wrs = wrs,
         .url = url,
         .max_conns = max_conns,
@@ -106,6 +112,11 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     };
     assert(pthread_mutex_init(&wrs->lock, NULL) == 0);
 
+    // Save association of the url with new handler
+    char* key = cx_alloc_malloc(wrs->alloc, strlen(url)+1);
+    strcpy(key, url);
+    map_rpc_set(&wrs->rpc_handlers, key, handler);
+
     // Register the websocket callback functions.
     mg_set_websocket_handler_with_subprotocols(wrs->ctx, url, &wsprot,
         wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
@@ -114,26 +125,59 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
 
 void  wrs_rpc_close(WrsRpc* rpc) {
 
-
+    mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
+    pthread_mutex_destroy(&rpc->lock);
 }
 
 int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
 
+    // Checks if there is already an association in this handler with the specified remote name
+    BindInfo* bind = map_bind_get(&rpc->binds, remote_name);
+    if (bind) {
+        return 1;
+    }
 
+    // Maps the remote name with the specified local function
+    char* remote_name_key = cx_alloc_malloc(rpc->wrs->alloc, strlen(remote_name)+1);
+    strcpy(remote_name_key, remote_name);
+    map_bind_set(&rpc->binds, remote_name_key, (BindInfo){.fn = fn});
     return 0;
 }
 
 int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
 
+    // Checks if there is already an association in this RPC endpoint with the specified remote name
+    BindInfo* bind = map_bind_get(&rpc->binds, remote_name);
+    if (bind == NULL) {
+        return 1;
+    }
 
+    map_bind_del(&rpc->binds, remote_name);
     return 0;
 }
+
+
+WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
+
+    WrsRpcInfo info = {0};
+    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    info.url = rpc->url;
+    info.nconns = rpc->nconns;
+    info.max_connid = arr_conn_len(&rpc->conns);
+    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    return info;
+}
+
+//-----------------------------------------------------------------------------
+// Local functions
+//-----------------------------------------------------------------------------
+
 
 // Handler for new websocket connections
 // The handler should return 0 to keep the WebSocket connection open
 static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_data) {
 
-    RpcHandler* rpc = user_data;
+    WrsRpc* rpc = user_data;
     assert(pthread_mutex_lock(&rpc->lock) == 0);
     int res = 0;
 
@@ -184,7 +228,7 @@ exit:
     assert(pthread_mutex_unlock(&rpc->lock) == 0);
     // Calls user handler if defined and if no errors occurred.
     if (res == 0 && rpc->evcb) {
-        rpc->evcb(rpc->wrs, rpc->url, connid, WrsEventOpen);
+        rpc->evcb(rpc, connid, WrsEventOpen);
     }
     return res;
 }
@@ -193,10 +237,10 @@ exit:
 static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data) {
 
     // Calls user handler
-    RpcHandler* rpc = user_data;
+    WrsRpc* rpc = user_data;
     const uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
     if (rpc->evcb) {
-        rpc->evcb(rpc->wrs, rpc->url, connid, WrsEventReady);
+        rpc->evcb(rpc, connid, WrsEventReady);
     }
 }
 
@@ -205,7 +249,7 @@ static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data) {
 // The handler should return 1 to keep the WebSocket connection open or 0 to close it.
 static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t dataSize, void *user_data) {
 
-    RpcHandler* rpc = user_data;
+    WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
 
     // Checks connection id and closes connection if invalid.
@@ -261,7 +305,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 // Returns 0 if OK
 // Returns 1 if not a call handler (cid undefined)
 // Returns 2 for other errors
-static int wrs_rpc_call_handler(RpcHandler* rpc, RpcClient* client, size_t connid, const CxVar* rxmsg) {
+static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* rxmsg) {
 
     // Checks message fields for remote call:
     // cid:     <number>
@@ -328,7 +372,7 @@ static int wrs_rpc_call_handler(RpcHandler* rpc, RpcClient* client, size_t conni
 // Called by RPC data handler to process received possible response
 // Returns 0 if OK
 // Returns 1 for other errors
-static int wrs_rpc_response_handler(RpcHandler* rpc, RpcClient* client, size_t connid, const CxVar* msg) {
+static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* msg) {
 
     // // The response message body must have the following format:
     // // { rid: <number>, resp: {err: <any> OR data: <any>}}
@@ -361,7 +405,7 @@ static int wrs_rpc_response_handler(RpcHandler* rpc, RpcClient* client, size_t c
 // Handler called when RPC client connection is closed.
 static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_data) {
 
-    RpcHandler* rpc = user_data;
+    WrsRpc* rpc = user_data;
     const uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
     int res = 0;
 
@@ -391,7 +435,7 @@ exit:
     assert(pthread_mutex_unlock(&rpc->lock) == 0);
     // Calls user handler if defined and if no errors occurred.
     if (res == 0 && rpc->evcb) {
-        rpc->evcb(rpc->wrs, rpc->url, connid, WrsEventClose);
+        rpc->evcb(rpc, connid, WrsEventClose);
     }
 }
 

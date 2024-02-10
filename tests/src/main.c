@@ -21,6 +21,7 @@ typedef struct AppState {
 
 // Forward declaration of local functions
 static int parse_options(int argc, const char* argv[], AppState* apps);
+static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 
 
 int main(int argc, const char* argv[]) {
@@ -54,17 +55,28 @@ int main(int argc, const char* argv[]) {
     };
 
     // Creates server
-    Wrs* wrc = wrs_create(&cfg);
+    Wrs* wrs = wrs_create(&cfg);
+
+    // Creates RPC endpoints
+    WrsRpc* rpc1  = wrs_rpc_open(wrs, "/rpc1", 2, rpc_event);
+    assert(rpc1);
+
+    // // Set bindings
+    // res = wui_bind_rpc(wa, RPC_URL, "get_time", rpc_get_time);
+    // assert(res == 0);
+    //
+    // res = wui_bind_rpc(wa, RPC_URL, "get_lines", rpc_get_lines);
 
     // Waits till server is stopped by test UI
     while (apps.run_server) {
         sleep(1);
     }
 
-    wrs_destroy(wrc);
+    wrs_destroy(wrs);
 
     return 0;
 }
+
 
 static int parse_options(int argc, const char* argv[], AppState* apps) {
 
@@ -84,3 +96,24 @@ static int parse_options(int argc, const char* argv[], AppState* apps) {
     argc = argparse_parse(&argparse, argc, argv);
     return 0;
 }
+
+static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev) {
+
+    WrsRpcInfo info = info = wrs_rpc_info(rpc);
+    char* evname = "?";
+    switch (ev) {
+        case WrsEventOpen:
+            evname = "Open";
+            break;
+        case WrsEventClose:
+            evname = "Close";
+            break;
+        case WrsEventReady:
+            evname = "Ready";
+            break;
+        default:
+            break;
+    }
+    WRS_LOGD("%s: handler:%s connid:%zu event:%s", __func__, info.url, connid, evname);
+}
+

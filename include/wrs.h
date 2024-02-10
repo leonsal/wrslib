@@ -75,7 +75,8 @@ typedef enum {
 } WrsEvent;
 
 // Type for local callback function to receive events
-typedef void (*WrsEventCallback)(Wrs* wrc, const char* url, size_t connid, WrsEvent ev);
+typedef struct WrsRpc WrsRpc;
+typedef void (*WrsEventCallback)(WrsRpc* rpc, size_t connid, WrsEvent ev);
 
 // Open RPC endpoint
 // wrs - WRS server
@@ -83,7 +84,6 @@ typedef void (*WrsEventCallback)(Wrs* wrc, const char* url, size_t connid, WrsEv
 // max_conns - Maximum number of client connections
 // vcb - Optional callback to receive events
 // returns NULL pointer on error.
-typedef struct WrsRpc WrsRpc;
 WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallback cb);
 
 // Close previously created RPC endpoint
@@ -119,11 +119,12 @@ typedef int (*WrsResponseFn)(WrsRpc* ep, size_t connid, const CxVar* resp);
 int wrs_rpc_call(WrsRpc* ep, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
 
 // Returns information about specified RPC endpoint
-typedef struct WrsEndpointInfo {
+typedef struct WrsRpcInfo {
+    const char* url;        // Associated url
     size_t  nconns;         // Current number of connection
     size_t  max_connid;     // Maximum valid connection id
-} WrsEndpointInfo;
-WrsEndpointInfo wrs_get_endpoint_info(WrsRpc* ep);
+} WrsRpcInfo;
+WrsRpcInfo wrs_rpc_info(WrsRpc* rpc);
 
 
 
