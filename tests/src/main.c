@@ -1,19 +1,27 @@
 #include <stdio.h>
+#include <unistd.h>
 
 #include "argparse.h"
 #include "wrc.h"
 
+// Static filesystem symbols
+extern const unsigned char gStaticfsZipData[];
+extern const unsigned int  gStaticfsZipSize;
+
 // Test application state
 typedef struct AppState {
-    int     server_port;        // HTTP server listening port
-    bool    use_staticfs;       // Use external app file system for development
+    int    server_port;        // HTTP server listening port
+    bool   use_staticfs;       // Use external app file system for development
+    _Atomic bool    run_server;
     // queue           queue_chartjs;
     // pthread_t       thread_chartjs_id;
     // ThreadArg       thread_arg;
     // _Atomic bool    run_server;
 } AppState;
 
+// Forward declaration of local functions
 static int parse_options(int argc, const char* argv[], AppState* apps);
+
 
 int main(int argc, const char* argv[]) {
 
@@ -24,9 +32,36 @@ int main(int argc, const char* argv[]) {
 
     // Parse command line options
     AppState apps = {
-        .server_port = 8888
+        .server_port = 8888,
+        .run_server = true,
+        
     };
     parse_options(argc, argv, &apps);
+
+    // Sets server config
+    WrcConfig cfg = {
+        .document_root       = "./src/staticfs",
+        .listening_port      = apps.server_port,
+        .use_staticfs        = apps.use_staticfs,
+        .staticfs_prefix     = "staticfs",
+        .staticfs_data       = gStaticfsZipData,
+        .staticfs_len        = gStaticfsZipSize,
+        .browser = {
+            .start = false,
+            .standard = false,
+            .cmd_line = {"google-chrome --app="},
+        },
+    };
+
+    // Createsserver
+    Wrc* wrc = wrc_create(&cfg);
+
+    while (apps.run_server) {
+        sleep(1);
+    }
+
+    wrc_destroy(wrc);
+
     return 0;
 }
 

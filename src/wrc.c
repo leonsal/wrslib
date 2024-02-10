@@ -1,16 +1,26 @@
 #include <assert.h>
-#include <pthread.h>
 #include <unistd.h>
+#include <string.h>
+#include <pthread.h>
 
 #include "civetweb.h"
-#include "cx_alloc.h"
-#include "cx_pool_allocator.h"
 #include "zip.h"
 
+#include "cx_alloc.h"
+#include "cx_pool_allocator.h"
 #include "cx_timer.h"
 #define WRC_LOG_IMPLEMENT
 #include "wrc.h"
-// Static logger (can be used by dependants)
+
+// Define internal array of server options
+#define cx_array_name arr_opt
+#define cx_array_type const char*
+#define cx_array_implement
+#define cx_array_static
+#define cx_array_instance_allocator
+#include "cx_array.h"
+
+// Global logger (can be used by dependants)
 wrc_logger wrc_default_logger;
 
 // WRC server internal state
@@ -18,7 +28,7 @@ typedef struct Wrc {
     WrcConfig           cfg;            // Copy of user configuration
     CxPoolAllocator*    pool_alloc;     // Pool allocator
     const CxAllocator*  alloc;          // Allocator interface for Pool Allocator
-    //arr_opt             options;        // Array of server options
+    arr_opt             options;        // Array of server options
     int                 used_port;      // Used TCP/IP listening port
     CxTimer*            tm;             // Timer manager
     pthread_mutex_t     lock;           // For exclusive access to this state
@@ -32,6 +42,7 @@ typedef struct Wrc {
 
 // Forward declarations of local functions
 static int wrc_find_port(Wrc* wrc);
+static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata);
 
 
 Wrc* wrc_create(const WrcConfig* cfg) {
@@ -62,7 +73,55 @@ Wrc* wrc_create(const WrcConfig* cfg) {
         wrc->used_port = port;
     }
 
-    return 0;
+    // Builds server options array
+    wrc->options = arr_opt_init(alloc);
+    if (cfg->document_root) {
+        arr_opt_push(&wrc->options, "document_root");
+        char* document_root = cx_alloc_malloc(alloc, strlen(cfg->document_root)+1);
+        strcpy(document_root, cfg->document_root);
+        arr_opt_push(&wrc->options, document_root);
+    }
+    // Sets listening port
+    const size_t size = 32;
+    char* listening_ports = cx_alloc_malloc(alloc, size);
+    snprintf(listening_ports, size-1, "%u", wrc->used_port);
+    arr_opt_push(&wrc->options, "listening_ports");
+    arr_opt_push(&wrc->options, listening_ports);
+    // Options array terminator
+    arr_opt_push(&wrc->options, NULL);
+    arr_opt_push(&wrc->options, NULL);
+
+    // Starts CivitWeb server
+    WRC_LOGD("%s: starting server listening on:%d", __func__, wrc->used_port);
+    mg_init_library(0);
+    const struct mg_callbacks callbacks = {0};
+    wrc->ctx = mg_start(&callbacks, wrc, (const char**) wrc->options.data);
+    if (wrc->ctx == NULL) {
+        WRC_LOGE("%s: error starting server", __func__);
+        return NULL;
+    }
+
+    // Open internal zipped static filesystem, if configured.
+    if (cfg->use_staticfs) {
+        // Creates zip source from specified zip data and length
+        zip_error_t error = {0};
+        wrc->zip_src = zip_source_buffer_create(cfg->staticfs_data, cfg->staticfs_len, 0, &error);
+        if (wrc->zip_src == NULL) {
+            WRC_LOGE("%s: error creating zip source buffer", __func__);
+            return NULL;
+        }
+        // Opens archive in source
+        wrc->zip = zip_open_from_source(wrc->zip_src, ZIP_RDONLY|ZIP_CHECKCONS, &error);
+        if (wrc->zip == NULL) {
+            WRC_LOGE("%s: error opening zip staticfs", __func__);
+            return NULL;
+        }
+        // Set CivitWeb request handler 
+        mg_set_request_handler(wrc->ctx, "/*", wrc_zip_file_handler, wrc);
+    }
+
+
+    return wrc;
 }
 
 
@@ -119,5 +178,85 @@ static int wrc_find_port(Wrc* wrc) {
         return port;
     }
     return -1;
+}
+
+static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata) {
+
+    Wrc* wrc = cbdata;
+
+    // Builds relative file path
+    char filepath[256] = {0};
+    if (wrc->cfg.staticfs_prefix) {
+        strncpy(filepath, wrc->cfg.staticfs_prefix, sizeof(filepath));
+    }
+    const struct mg_request_info* rinfo = mg_get_request_info(conn);
+    if (strcmp(rinfo->request_uri, "/") == 0) {
+         strcat(filepath, "/index.html");
+    } else {
+        strcat(filepath, rinfo->request_uri);
+    }
+
+    // Locks access to the zip file
+    assert(pthread_mutex_lock(&wrc->lock) == 0);
+    int res = 0;
+
+    // Get deflated file size from zip archive
+    zip_stat_t stats;
+    res = zip_stat(wrc->zip, filepath, 0, &stats);
+    if (res) {
+        mg_send_http_error(conn, 404, "%s", "Error: File not found");
+        goto unlock;
+    }
+
+    // Allocates buffer to read file deflated data
+    void *fileBuf = malloc(stats.size);
+    if (fileBuf == NULL) {
+        mg_send_http_error(conn, 500, "%s", "Error: No memory");
+        res = 1;
+        goto unlock;
+    }
+
+    // Opens zip file
+    zip_file_t* zipf = zip_fopen(wrc->zip, filepath, 0);
+    if (zipf == NULL) {
+        mg_send_http_error(conn, 500, "%s", "Error: Open file");
+        free(fileBuf);
+        res = 1;
+        goto unlock;
+    }
+
+    // Reads deflated file
+    zip_int64_t nread = zip_fread(zipf, fileBuf, stats.size);
+    if (nread < 0) {
+        mg_send_http_error(conn, 500, "%s", "Error: Reading file");
+        free(fileBuf);
+        res = 1;
+        goto unlock;
+    }
+    zip_fclose(zipf);
+
+unlock:
+    assert(pthread_mutex_unlock(&wrc->lock) == 0);
+    if (res) {
+        return res;
+    }
+
+    // Send headers
+    res |= mg_response_header_start(conn, 200);
+    const char* mime_type = mg_get_builtin_mime_type(filepath);
+    res |= mg_response_header_add(conn, "Content-Type", mime_type, -1);
+    char lenStr[64];
+    snprintf(lenStr, sizeof(lenStr)-1, "%zu", stats.size);
+    res |= mg_response_header_add(conn, "Content-Length", lenStr, -1);
+    res |= mg_response_header_send(conn);
+    assert(res == 0);
+
+    // Send file data
+    res = mg_write(conn, fileBuf, stats.size);
+    assert(res == (int)stats.size);
+
+    free(fileBuf);
+    printf("zip:%s (%s)\n", filepath, mime_type);
+    return res;
 }
 
