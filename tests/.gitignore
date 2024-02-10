@@ -1,0 +1,6 @@
+build/
+build_options
+deps_cache/
+tests
+.cache
+
