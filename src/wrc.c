@@ -141,24 +141,26 @@ Wrc* wrc_create(const WrcConfig* cfg) {
 // Stops and destroy previously create WRC server
 void  wrc_destroy(Wrc* wrc) {
 
-
-
-
-
+    cx_timer_destroy(wrc->tm);
+    mg_stop(wrc->ctx);
+    if (wrc->zip) {
+        zip_close(wrc->zip);
+    }
+    assert(pthread_mutex_destroy(&wrc->lock) == 0);
+    cx_pool_allocator_destroy(wrc->pool_alloc);
 }
 
 void wrc_set_userdata(Wrc* wrc, void* userdata) {
 
-
+    wrc->userdata = userdata;
 }
 
 void* wrc_get_userdata(Wrc* wrc) {
 
-
-
-
-    return NULL;
+    return wrc->userdata;
 }
+
+
 
 //-----------------------------------------------------------------------------
 // Local functions
