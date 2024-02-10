@@ -47,7 +47,7 @@ CPMAddPackage(
 )
 
 set(SOURCES
-    include/wrc.h
+    include/wrs.h
     src/server.c
     src/rpc.c
     src/rpc_codec.h

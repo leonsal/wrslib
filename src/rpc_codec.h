@@ -1,4 +1,4 @@
-#ifndef wrc_CODEC_H
+#ifndef RPC_CODEC_H
 #define RPC_CODEC_H
 
 #include <stdbool.h>
@@ -15,37 +15,37 @@ typedef enum {
 } WuiChunkType;
 
 // Creates encoder for messages buffer using specified allocator.
-typedef struct WrcEncoder WrcEncoder;
-WrcEncoder* wrc_encoder_new(const CxAllocator* alloc);
+typedef struct WrsEncoder WrsEncoder;
+WrsEncoder* wrc_encoder_new(const CxAllocator* alloc);
 
 // Destroy previously created encoder, deallocating memory
-void wrc_encoder_del(WrcEncoder*);
+void wrc_encoder_del(WrsEncoder*);
 
 // Clear encoder buffer, without deallocating memory
-void wrc_encoder_clear(WrcEncoder* e);
+void wrc_encoder_clear(WrsEncoder* e);
 
 // Encodes message into internal buffer and returns non-zero error.
-int wrc_encoder_enc(WrcEncoder* e, CxVar* msg);
+int wrc_encoder_enc(WrsEncoder* e, CxVar* msg);
 
 // Get last message encoded
-void* wrc_encoder_msg(WrcEncoder* e, bool* text, size_t* len);
+void* wrc_encoder_msg(WrsEncoder* e, bool* text, size_t* len);
 
 //-----------------------------------------------------------------------------
 // Decoder
 //-----------------------------------------------------------------------------
 
 // Creates message decoder
-typedef struct WrcDecoder WrcDecoder;
-WrcDecoder* wrc_decoder_new(const CxAllocator* alloc);
+typedef struct WrsDecoder WrsDecoder;
+WrsDecoder* wrc_decoder_new(const CxAllocator* alloc);
 
 // Destroy previously created decoder, deallocating memory
-void wrc_decoder_del(WrcDecoder* d);
+void wrc_decoder_del(WrsDecoder* d);
 
 // Clear decoder state, without deallocating memory
-void wrc_decoder_clear(WrcDecoder* e);
+void wrc_decoder_clear(WrsDecoder* e);
 
 // Decodes message and returns non zero error code if message is invalid
-int wrc_decoder_dec(WrcDecoder* d, bool text, void* data, size_t len, CxVar* msg);
+int wrc_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
 
 
 #endif

@@ -2,7 +2,7 @@
 #include <unistd.h>
 
 #include "argparse.h"
-#include "wrc.h"
+#include "wrs.h"
 
 // Static filesystem symbols
 extern const unsigned char gStaticfsZipData[];
@@ -26,9 +26,9 @@ static int parse_options(int argc, const char* argv[], AppState* apps);
 int main(int argc, const char* argv[]) {
 
     // Initializes WRC logger
-    wrc_logger_set_flags(&wrc_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
-    wrc_logger_add_handler(&wrc_default_logger, wrc_logger_console_handler, NULL, CX_LOG_DEBUG);
-    WRC_LOGD("WRT tests");
+    wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
+    wrs_logger_add_handler(&wrs_default_logger, wrs_logger_console_handler, NULL, CX_LOG_DEBUG);
+    WRS_LOGD("WRT tests");
 
     // Parse command line options
     AppState apps = {
@@ -39,7 +39,7 @@ int main(int argc, const char* argv[]) {
     parse_options(argc, argv, &apps);
 
     // Sets server config
-    WrcConfig cfg = {
+    WrsConfig cfg = {
         .document_root       = "./src/staticfs",
         .listening_port      = apps.server_port,
         .use_staticfs        = apps.use_staticfs,
@@ -54,14 +54,14 @@ int main(int argc, const char* argv[]) {
     };
 
     // Creates server
-    Wrc* wrc = wrc_create(&cfg);
+    Wrs* wrc = wrs_create(&cfg);
 
     // Waits till server is stopped by test UI
     while (apps.run_server) {
         sleep(1);
     }
 
-    wrc_destroy(wrc);
+    wrs_destroy(wrc);
 
     return 0;
 }

@@ -9,8 +9,8 @@
 #include "cx_alloc.h"
 #include "cx_pool_allocator.h"
 #include "cx_timer.h"
-#define WRC_LOG_IMPLEMENT
-#include "wrc.h"
+#define WRS_LOG_IMPLEMENT
+#include "wrs.h"
 
 // Define internal array of server options
 #define cx_array_name arr_opt
@@ -21,11 +21,11 @@
 #include "cx_array.h"
 
 // Global logger (can be used by dependants)
-wrc_logger wrc_default_logger;
+wrs_logger wrs_default_logger;
 
 // WRC server internal state
-typedef struct Wrc {
-    WrcConfig           cfg;            // Copy of user configuration
+typedef struct Wrs {
+    WrsConfig           cfg;            // Copy of user configuration
     CxPoolAllocator*    pool_alloc;     // Pool allocator
     const CxAllocator*  alloc;          // Allocator interface for Pool Allocator
     arr_opt             options;        // Array of server options
@@ -37,67 +37,67 @@ typedef struct Wrc {
     zip_t*              zip;            // For zip static filesystem
     //map_rpc             rpc_handlers;   // Map url to web socket rpc handler
     void*               userdata;       // Optional userdata
-} Wrc;
+} Wrs;
 
 
 // Forward declarations of local functions
-static int wrc_find_port(Wrc* wrc);
-static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata);
-static int wrc_start_browser(Wrc* wrc);
+static int wrs_find_port(Wrs* wrs);
+static int wrs_zip_file_handler(struct mg_connection *conn, void *cbdata);
+static int wrs_start_browser(Wrs* wrs);
 
 
-Wrc* wrc_create(const WrcConfig* cfg) {
+Wrs* wrs_create(const WrsConfig* cfg) {
 
     // Creates allocator to use
     CxPoolAllocator* pool_alloc = cx_pool_allocator_create(4*1024, NULL);
     const CxAllocator* alloc = cx_pool_allocator_iface(pool_alloc);
 
     // Creates and initializes internal state
-    Wrc* wrc = cx_alloc_malloc(alloc, sizeof(Wrc));
-    if (wrc == NULL) {
+    Wrs* wrs = cx_alloc_malloc(alloc, sizeof(Wrs));
+    if (wrs == NULL) {
         return NULL;
     }
-    memset(wrc, 0, sizeof(Wrc));
-    wrc->cfg = *cfg;
-    wrc->pool_alloc = pool_alloc;
-    wrc->alloc = alloc;
-    //wrc->rpc_handlers = map_rpc_init(alloc, 17);
-    assert(pthread_mutex_init(&wrc->lock, NULL) == 0);
+    memset(wrs, 0, sizeof(Wrs));
+    wrs->cfg = *cfg;
+    wrs->pool_alloc = pool_alloc;
+    wrs->alloc = alloc;
+    //wrs->rpc_handlers = map_rpc_init(alloc, 17);
+    assert(pthread_mutex_init(&wrs->lock, NULL) == 0);
 
     // If configured listening port is 0, finds an unused port
-    wrc->used_port = cfg->listening_port;
+    wrs->used_port = cfg->listening_port;
     if (cfg->listening_port == 0) {
-        int port = wrc_find_port(wrc);
+        int port = wrs_find_port(wrs);
         if (port < 0) {
             return NULL;
         }
-        wrc->used_port = port;
+        wrs->used_port = port;
     }
 
     // Builds server options array
-    wrc->options = arr_opt_init(alloc);
+    wrs->options = arr_opt_init(alloc);
     if (cfg->document_root) {
-        arr_opt_push(&wrc->options, "document_root");
+        arr_opt_push(&wrs->options, "document_root");
         char* document_root = cx_alloc_malloc(alloc, strlen(cfg->document_root)+1);
         strcpy(document_root, cfg->document_root);
-        arr_opt_push(&wrc->options, document_root);
+        arr_opt_push(&wrs->options, document_root);
     }
     // Sets listening port
     const size_t size = 32;
     char* listening_ports = cx_alloc_malloc(alloc, size);
-    snprintf(listening_ports, size-1, "%u", wrc->used_port);
-    arr_opt_push(&wrc->options, "listening_ports");
-    arr_opt_push(&wrc->options, listening_ports);
+    snprintf(listening_ports, size-1, "%u", wrs->used_port);
+    arr_opt_push(&wrs->options, "listening_ports");
+    arr_opt_push(&wrs->options, listening_ports);
     // Options array terminator
-    arr_opt_push(&wrc->options, NULL);
-    arr_opt_push(&wrc->options, NULL);
+    arr_opt_push(&wrs->options, NULL);
+    arr_opt_push(&wrs->options, NULL);
 
     // Starts CivitWeb server
     mg_init_library(0);
     const struct mg_callbacks callbacks = {0};
-    wrc->ctx = mg_start(&callbacks, wrc, (const char**) wrc->options.data);
-    if (wrc->ctx == NULL) {
-        WRC_LOGE("%s: error starting server", __func__);
+    wrs->ctx = mg_start(&callbacks, wrs, (const char**) wrs->options.data);
+    if (wrs->ctx == NULL) {
+        WRS_LOGE("%s: error starting server", __func__);
         return NULL;
     }
 
@@ -105,59 +105,59 @@ Wrc* wrc_create(const WrcConfig* cfg) {
     if (cfg->use_staticfs) {
         // Creates zip source from specified zip data and length
         zip_error_t error = {0};
-        wrc->zip_src = zip_source_buffer_create(cfg->staticfs_data, cfg->staticfs_len, 0, &error);
-        if (wrc->zip_src == NULL) {
-            WRC_LOGE("%s: error creating zip source buffer", __func__);
+        wrs->zip_src = zip_source_buffer_create(cfg->staticfs_data, cfg->staticfs_len, 0, &error);
+        if (wrs->zip_src == NULL) {
+            WRS_LOGE("%s: error creating zip source buffer", __func__);
             return NULL;
         }
         // Opens archive in source
-        wrc->zip = zip_open_from_source(wrc->zip_src, ZIP_RDONLY|ZIP_CHECKCONS, &error);
-        if (wrc->zip == NULL) {
-            WRC_LOGE("%s: error opening zip staticfs", __func__);
+        wrs->zip = zip_open_from_source(wrs->zip_src, ZIP_RDONLY|ZIP_CHECKCONS, &error);
+        if (wrs->zip == NULL) {
+            WRS_LOGE("%s: error opening zip staticfs", __func__);
             return NULL;
         }
         // Set CivitWeb request handler 
-        mg_set_request_handler(wrc->ctx, "/*", wrc_zip_file_handler, wrc);
+        mg_set_request_handler(wrs->ctx, "/*", wrs_zip_file_handler, wrs);
     }
 
     // Creates timer manager
-    wrc->tm = cx_timer_create(wrc->alloc);
-    if (wrc->tm == NULL) {
-        WRC_LOGE("%s: error from cx_timer_create()", __func__);
+    wrs->tm = cx_timer_create(wrs->alloc);
+    if (wrs->tm == NULL) {
+        WRS_LOGE("%s: error from cx_timer_create()", __func__);
         return NULL;
     }
 
     // Starts browser, if requested
-    if (wrc->cfg.browser.start) {
-        wrc_start_browser(wrc);
+    if (wrs->cfg.browser.start) {
+        wrs_start_browser(wrs);
     }
 
-    WRC_LOGD("%s: listening on: %d", __func__, wrc->used_port);
-    WRC_LOGD("%s: using filesystem: %s", __func__, wrc->cfg.use_staticfs ? "INTERNAL" : "EXTERNAL");
-    return wrc;
+    WRS_LOGD("%s: listening on: %d", __func__, wrs->used_port);
+    WRS_LOGD("%s: using filesystem: %s", __func__, wrs->cfg.use_staticfs ? "INTERNAL" : "EXTERNAL");
+    return wrs;
 }
 
 
-// Stops and destroy previously create WRC server
-void  wrc_destroy(Wrc* wrc) {
+// Stops and destroy previously create wrs server
+void  wrs_destroy(Wrs* wrs) {
 
-    cx_timer_destroy(wrc->tm);
-    mg_stop(wrc->ctx);
-    if (wrc->zip) {
-        zip_close(wrc->zip);
+    cx_timer_destroy(wrs->tm);
+    mg_stop(wrs->ctx);
+    if (wrs->zip) {
+        zip_close(wrs->zip);
     }
-    assert(pthread_mutex_destroy(&wrc->lock) == 0);
-    cx_pool_allocator_destroy(wrc->pool_alloc);
+    assert(pthread_mutex_destroy(&wrs->lock) == 0);
+    cx_pool_allocator_destroy(wrs->pool_alloc);
 }
 
-void wrc_set_userdata(Wrc* wrc, void* userdata) {
+void wrs_set_userdata(Wrs* wrs, void* userdata) {
 
-    wrc->userdata = userdata;
+    wrs->userdata = userdata;
 }
 
-void* wrc_get_userdata(Wrc* wrc) {
+void* wrs_get_userdata(Wrs* wrs) {
 
-    return wrc->userdata;
+    return wrs->userdata;
 }
 
 
@@ -166,7 +166,7 @@ void* wrc_get_userdata(Wrc* wrc) {
 // Local functions
 //-----------------------------------------------------------------------------
 
-static int wrc_find_port(Wrc* wrc) {
+static int wrs_find_port(Wrs* wrs) {
 
     const int min_port = 10000;
     const int max_port = 65000;
@@ -195,14 +195,14 @@ static int wrc_find_port(Wrc* wrc) {
     return -1;
 }
 
-static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata) {
+static int wrs_zip_file_handler(struct mg_connection *conn, void *cbdata) {
 
-    Wrc* wrc = cbdata;
+    Wrs* wrs = cbdata;
 
     // Builds relative file path
     char filepath[256] = {0};
-    if (wrc->cfg.staticfs_prefix) {
-        strncpy(filepath, wrc->cfg.staticfs_prefix, sizeof(filepath));
+    if (wrs->cfg.staticfs_prefix) {
+        strncpy(filepath, wrs->cfg.staticfs_prefix, sizeof(filepath));
     }
     const struct mg_request_info* rinfo = mg_get_request_info(conn);
     if (strcmp(rinfo->request_uri, "/") == 0) {
@@ -212,12 +212,12 @@ static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata) {
     }
 
     // Locks access to the zip file
-    assert(pthread_mutex_lock(&wrc->lock) == 0);
+    assert(pthread_mutex_lock(&wrs->lock) == 0);
     int res = 0;
 
     // Get deflated file size from zip archive
     zip_stat_t stats;
-    res = zip_stat(wrc->zip, filepath, 0, &stats);
+    res = zip_stat(wrs->zip, filepath, 0, &stats);
     if (res) {
         mg_send_http_error(conn, 404, "%s", "Error: File not found");
         goto unlock;
@@ -232,7 +232,7 @@ static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata) {
     }
 
     // Opens zip file
-    zip_file_t* zipf = zip_fopen(wrc->zip, filepath, 0);
+    zip_file_t* zipf = zip_fopen(wrs->zip, filepath, 0);
     if (zipf == NULL) {
         mg_send_http_error(conn, 500, "%s", "Error: Open file");
         free(fileBuf);
@@ -251,7 +251,7 @@ static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata) {
     zip_fclose(zipf);
 
 unlock:
-    assert(pthread_mutex_unlock(&wrc->lock) == 0);
+    assert(pthread_mutex_unlock(&wrs->lock) == 0);
     if (res) {
         return res;
     }
@@ -275,25 +275,25 @@ unlock:
     return res;
 }
 
-static int wrc_start_browser(Wrc* wrc) {
+static int wrs_start_browser(Wrs* wrs) {
 
     // Generates URL
     char url[64];
-    snprintf(url, sizeof(url), "http://localhost:%u", wrc->used_port);
+    snprintf(url, sizeof(url), "http://localhost:%u", wrs->used_port);
 
     // Generates command line
     char command[1024];
-    if (wrc->cfg.browser.standard) {
+    if (wrs->cfg.browser.standard) {
         snprintf(command, sizeof(command), "xdg-open \"%s\"", url);
-    } else if (strlen(wrc->cfg.browser.cmd_line)) {
-        snprintf(command, sizeof(command), "%s%s >>/dev/null 2>>/dev/null &", wrc->cfg.browser.cmd_line, url);
+    } else if (strlen(wrs->cfg.browser.cmd_line)) {
+        snprintf(command, sizeof(command), "%s%s >>/dev/null 2>>/dev/null &", wrs->cfg.browser.cmd_line, url);
     }
 
     // Executes command
-    WRC_LOGD("Starting browser:%s", command);
+    WRS_LOGD("Starting browser:%s", command);
     int res = system(command);
     if (res < 0) {
-        WRC_LOGE("Error starting browser:%s", command);
+        WRS_LOGE("Error starting browser:%s", command);
     }
     return res;
 }
