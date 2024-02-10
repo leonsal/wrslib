@@ -53,9 +53,10 @@ int main(int argc, const char* argv[]) {
         },
     };
 
-    // Createsserver
+    // Creates server
     Wrc* wrc = wrc_create(&cfg);
 
+    // Waits till server is stopped by test UI
     while (apps.run_server) {
         sleep(1);
     }

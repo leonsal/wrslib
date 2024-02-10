@@ -43,6 +43,7 @@ typedef struct Wrc {
 // Forward declarations of local functions
 static int wrc_find_port(Wrc* wrc);
 static int wrc_zip_file_handler(struct mg_connection *conn, void *cbdata);
+static int wrc_start_browser(Wrc* wrc);
 
 
 Wrc* wrc_create(const WrcConfig* cfg) {
@@ -92,7 +93,6 @@ Wrc* wrc_create(const WrcConfig* cfg) {
     arr_opt_push(&wrc->options, NULL);
 
     // Starts CivitWeb server
-    WRC_LOGD("%s: starting server listening on:%d", __func__, wrc->used_port);
     mg_init_library(0);
     const struct mg_callbacks callbacks = {0};
     wrc->ctx = mg_start(&callbacks, wrc, (const char**) wrc->options.data);
@@ -120,7 +120,20 @@ Wrc* wrc_create(const WrcConfig* cfg) {
         mg_set_request_handler(wrc->ctx, "/*", wrc_zip_file_handler, wrc);
     }
 
+    // Creates timer manager
+    wrc->tm = cx_timer_create(wrc->alloc);
+    if (wrc->tm == NULL) {
+        WRC_LOGE("%s: error from cx_timer_create()", __func__);
+        return NULL;
+    }
 
+    // Starts browser, if requested
+    if (wrc->cfg.browser.start) {
+        wrc_start_browser(wrc);
+    }
+
+    WRC_LOGD("%s: listening on: %d", __func__, wrc->used_port);
+    WRC_LOGD("%s: using filesystem: %s", __func__, wrc->cfg.use_staticfs ? "INTERNAL" : "EXTERNAL");
     return wrc;
 }
 
@@ -259,4 +272,28 @@ unlock:
     printf("zip:%s (%s)\n", filepath, mime_type);
     return res;
 }
+
+static int wrc_start_browser(Wrc* wrc) {
+
+    // Generates URL
+    char url[64];
+    snprintf(url, sizeof(url), "http://localhost:%u", wrc->used_port);
+
+    // Generates command line
+    char command[1024];
+    if (wrc->cfg.browser.standard) {
+        snprintf(command, sizeof(command), "xdg-open \"%s\"", url);
+    } else if (strlen(wrc->cfg.browser.cmd_line)) {
+        snprintf(command, sizeof(command), "%s%s >>/dev/null 2>>/dev/null &", wrc->cfg.browser.cmd_line, url);
+    }
+
+    // Executes command
+    WRC_LOGD("Starting browser:%s", command);
+    int res = system(command);
+    if (res < 0) {
+        WRC_LOGE("Error starting browser:%s", command);
+    }
+    return res;
+}
+
 
