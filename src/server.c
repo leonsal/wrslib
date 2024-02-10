@@ -6,39 +6,14 @@
 #include "civetweb.h"
 #include "zip.h"
 
-#include "cx_alloc.h"
-#include "cx_pool_allocator.h"
-#include "cx_timer.h"
 #define WRS_LOG_IMPLEMENT
 #include "wrs.h"
 
-// Define internal array of server options
-#define cx_array_name arr_opt
-#define cx_array_type const char*
-#define cx_array_implement
-#define cx_array_static
-#define cx_array_instance_allocator
-#include "cx_array.h"
+#define WRS_SERVER_IMPLEMENT
+#include "server.h"
 
 // Global logger (can be used by dependants)
 wrs_logger wrs_default_logger;
-
-// WRC server internal state
-typedef struct Wrs {
-    WrsConfig           cfg;            // Copy of user configuration
-    CxPoolAllocator*    pool_alloc;     // Pool allocator
-    const CxAllocator*  alloc;          // Allocator interface for Pool Allocator
-    arr_opt             options;        // Array of server options
-    int                 used_port;      // Used TCP/IP listening port
-    CxTimer*            tm;             // Timer manager
-    pthread_mutex_t     lock;           // For exclusive access to this state
-    struct mg_context*  ctx;            // CivitWeb context
-    zip_source_t*       zip_src;        // For zip static filesystem
-    zip_t*              zip;            // For zip static filesystem
-    //map_rpc             rpc_handlers;   // Map url to web socket rpc handler
-    void*               userdata;       // Optional userdata
-} Wrs;
-
 
 // Forward declarations of local functions
 static int wrs_find_port(Wrs* wrs);

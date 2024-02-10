@@ -78,37 +78,37 @@ typedef enum {
 typedef void (*WrsEventCallback)(Wrs* wrc, const char* url, size_t connid, WrsEvent ev);
 
 // Open RPC endpoint
-// wrc - WRC server object
+// wrs - WRS server
 // url - Relative url for this endpoint
 // max_conns - Maximum number of client connections
 // vcb - Optional callback to receive events
 // returns NULL pointer on error.
-typedef struct WrsEndpoint WrsEndpoint;
-WrsEndpoint* wrs_rpc_open(Wrs* wrc, const char* url, size_t max_conns, WrsEventCallback cb);
+typedef struct WrsRpc WrsRpc;
+WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallback cb);
 
 // Close previously created RPC endpoint
 // ep - Pointer to endpoint
 // returns non zero error code on errors.
-void  wrs_rpc_close(WrsEndpoint* ep);
+void  wrs_rpc_close(WrsRpc* ep);
 
 // Binds a local C function to be called by remote client using RPC.
 // ep - Wrs endpoint
 // remote_name - the name used by remote client to call this local function.
 // fn - pointer to local function which will be called.
 // Returns non zero result on errors.
-int wrs_rpc_bind(WrsEndpoint* ep, const char* remote_name, WrsRpcFn fn);
+int wrs_rpc_bind(WrsRpc* ep, const char* remote_name, WrsRpcFn local_fn);
 
 // Unbinds a previously binded local function from the endpoint
 // ep - Wrs endpoint
 // remote_name - the name used by remote client to call this local function.
-int wrs_rpc_unbind(WrsEndpoint* ep, const char* remote_name);
+int wrs_rpc_unbind(WrsRpc* ep, const char* remote_name);
 
 // Type for RPC response function
 // ep - endpoint from which the response arrived
 // url - identifies the RPC endpoint
 // connid - identifies the connection id
 // resp - response message
-typedef int (*WrsResponseFn)(WrsEndpoint* ep, size_t connid, const CxVar* resp);
+typedef int (*WrsResponseFn)(WrsRpc* ep, size_t connid, const CxVar* resp);
 
 // Calls remote function using RPC connection
 // url - identifies the RPC endpoint
@@ -116,14 +116,14 @@ typedef int (*WrsResponseFn)(WrsEndpoint* ep, size_t connid, const CxVar* resp);
 // remote_name - the name of the remote function to call
 // params - message with parameters to send to remote function
 // cb - Optional callback to receive response from remote function
-int wrs_rpc_call(WrsEndpoint* ep, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
+int wrs_rpc_call(WrsRpc* ep, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
 
 // Returns information about specified RPC endpoint
 typedef struct WrsEndpointInfo {
     size_t  nconns;         // Current number of connection
     size_t  max_connid;     // Maximum valid connection id
 } WrsEndpointInfo;
-WrsEndpointInfo wrs_get_endpoint_info(WrsEndpoint* ep);
+WrsEndpointInfo wrs_get_endpoint_info(WrsRpc* ep);
 
 
 

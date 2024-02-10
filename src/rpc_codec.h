@@ -16,19 +16,19 @@ typedef enum {
 
 // Creates encoder for messages buffer using specified allocator.
 typedef struct WrsEncoder WrsEncoder;
-WrsEncoder* wrc_encoder_new(const CxAllocator* alloc);
+WrsEncoder* wrs_encoder_new(const CxAllocator* alloc);
 
 // Destroy previously created encoder, deallocating memory
-void wrc_encoder_del(WrsEncoder*);
+void wrs_encoder_del(WrsEncoder*);
 
 // Clear encoder buffer, without deallocating memory
-void wrc_encoder_clear(WrsEncoder* e);
+void wrs_encoder_clear(WrsEncoder* e);
 
 // Encodes message into internal buffer and returns non-zero error.
-int wrc_encoder_enc(WrsEncoder* e, CxVar* msg);
+int wrs_encoder_enc(WrsEncoder* e, CxVar* msg);
 
 // Get last message encoded
-void* wrc_encoder_msg(WrsEncoder* e, bool* text, size_t* len);
+void* wrs_encoder_msg(WrsEncoder* e, bool* text, size_t* len);
 
 //-----------------------------------------------------------------------------
 // Decoder
@@ -36,16 +36,16 @@ void* wrc_encoder_msg(WrsEncoder* e, bool* text, size_t* len);
 
 // Creates message decoder
 typedef struct WrsDecoder WrsDecoder;
-WrsDecoder* wrc_decoder_new(const CxAllocator* alloc);
+WrsDecoder* wrs_decoder_new(const CxAllocator* alloc);
 
 // Destroy previously created decoder, deallocating memory
-void wrc_decoder_del(WrsDecoder* d);
+void wrs_decoder_del(WrsDecoder* d);
 
 // Clear decoder state, without deallocating memory
-void wrc_decoder_clear(WrsDecoder* e);
+void wrs_decoder_clear(WrsDecoder* e);
 
 // Decodes message and returns non zero error code if message is invalid
-int wrc_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
+int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
 
 
 #endif
