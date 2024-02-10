@@ -5,11 +5,23 @@
 #include "cx_var.h"
 #include "cx_pool_allocator.h"
 #include "wrc.h"
+#include "rpc_codec.h"
 
 // Local function binding info
 typedef struct BindInfo {
     WrcRpcFn fn;
 } BindInfo;
+
+// Define internal hashmap from remote name to local rpc function
+#define cx_hmap_name map_bind
+#define cx_hmap_key  const char*
+#define cx_hmap_val  BindInfo
+#define cx_hmap_cmp_key cx_hmap_cmp_key_str_ptr
+#define cx_hmap_hash_key cx_hmap_hash_key_str_ptr
+#define cx_hmap_instance_allocator
+#define cx_hmap_implement
+#define cx_hmap_static
+#include "cx_hmap.h"
 
 // Callback info
 typedef struct ResponseInfo {
@@ -33,22 +45,30 @@ typedef struct RpcClient {
     const CxAllocator*      alloc;          // Allocator interface for Pool Allocator
     CxVar*                  rxmsg;            
     CxVar*                  txmsg;
-    //WuiDecoder*             dec;            // Message decoder
-    //WuiEncoder*             enc;            // Message encoder
+    WrcDecoder*             dec;            // Message decoder
+    WrcEncoder*             enc;            // Message encoder
     uint64_t                cid;            // Next call id
     map_resp                responses;      // Map of call cid to local callback function
 } RpcClient;
 
-// WebSocket handler state
+// Define internal array of RPC client connections
+#define cx_array_name arr_conn
+#define cx_array_type RpcClient
+#define cx_array_instance_allocator
+#define cx_array_implement
+#define cx_array_static
+#include "cx_array.h"
+
+// WebSocket RPC handler state
 typedef struct RpcHandler {
     Wrc*                wrc;            // Associated server
     const char*         url;            // This websocket handler URL
     uint32_t            max_conns;      // Maximum number of connection
     size_t              nconns;         // Current number of connections
-    //arr_conn            conns;          // Array of connections info
+    arr_conn            conns;          // Array of connections info
     pthread_mutex_t     lock;           // Mutex for exclusive access to this struct
-    //map_bind            binds;          // Map remote name to local bind info
-    //WuiRpcEventCallback evcb;           // Optional user event callback
+    map_bind            binds;          // Map remote name to local bind info
+    WrcEventCallback    evcb;           // Optional user event callback
 } RpcHandler;
 
 WrcEndpoint* wrc_open_endpoint(Wrc* wrc, const char* url, size_t max_conns, WrcEventCallback cb) {
