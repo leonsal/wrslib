@@ -9,42 +9,43 @@
 
 // Encoded binary message chunk types
 typedef enum {
-    WuiChunkMsg = 1,
-    WuiChunkBuf,
-    WuiChunkTypeInvalid,
-} WuiChunkType;
+    WrsChunkMsg = 1,
+    WrsChunkBuf,
+    WrsChunkTypeInvalid,
+} WrsChunkType;
 
-// Creates encoder for messages buffer using specified allocator.
+// Creates message encoder using specified allocator.
 typedef struct WrsEncoder WrsEncoder;
 WrsEncoder* wrs_encoder_new(const CxAllocator* alloc);
 
-// Destroy previously created encoder, deallocating memory
+// Destroy previously created message encoder, deallocating memory
 void wrs_encoder_del(WrsEncoder*);
 
-// Clear encoder buffer, without deallocating memory
+// Clear message encoder internal buffers, without deallocating memory
 void wrs_encoder_clear(WrsEncoder* e);
 
 // Encodes message into internal buffer and returns non-zero error.
 int wrs_encoder_enc(WrsEncoder* e, CxVar* msg);
 
-// Get last message encoded
-void* wrs_encoder_msg(WrsEncoder* e, bool* text, size_t* len);
+// Get the type, pointer and length of last message encoded buffer.
+void* wrs_encoder_get_msg(WrsEncoder* e, bool* text, size_t* len);
 
 //-----------------------------------------------------------------------------
 // Decoder
 //-----------------------------------------------------------------------------
 
-// Creates message decoder
+// Creates message decoder using specified allocator
 typedef struct WrsDecoder WrsDecoder;
 WrsDecoder* wrs_decoder_new(const CxAllocator* alloc);
 
-// Destroy previously created decoder, deallocating memory
+// Destroy previously created message decoder, deallocating memory
 void wrs_decoder_del(WrsDecoder* d);
 
-// Clear decoder state, without deallocating memory
+// Clear message decoder state, without deallocating memory
 void wrs_decoder_clear(WrsDecoder* e);
 
-// Decodes message and returns non zero error code if message is invalid
+// Decodes message text or binary message
+// Returns non zero error code on error.
 int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
 
 

@@ -356,7 +356,7 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     // Get encoded message type and buffer
     bool text;
     size_t len;
-    void* msg = wrs_encoder_msg(client->enc, &text, &len);
+    void* msg = wrs_encoder_get_msg(client->enc, &text, &len);
     int opcode = text ? MG_WEBSOCKET_OPCODE_TEXT : MG_WEBSOCKET_OPCODE_BINARY;
 
     // Sends response to remote client
