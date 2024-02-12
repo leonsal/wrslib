@@ -37,9 +37,9 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
 static int cmd_call(Cli* cli, void* udata);
 
 #define CHKT(COND) \
-    { if (!COND) {fprintf(stderr, "CHK ERROR: %s:%d/%s()\n", __FILE__, __LINE__, __func__); abort();}}
+    { if (!COND) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
 #define CHKF(COND) \
-    { if (COND) {fprintf(stderr, "CHK ERROR: %s:%d/%s()\n", __FILE__, __LINE__, __func__); abort();}}
+    { if (COND) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
 
 int main(int argc, const char* argv[]) {
 
@@ -149,6 +149,7 @@ static void command_line_loop(AppState* app) {
         }
         if (res == CliInvalidCmd) {
             printf("Invalid command\n");
+            continue;
         }
         if (res < 0) {
             printf("%s\n", strerror(-res));
