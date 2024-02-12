@@ -5,7 +5,7 @@
         { n: 1, bufa:<CxVarBuf>, bufb:<CxVarBuf>}
 
         Is encoded as JSON as:
-        { n: 1, bufa:"CxVarBuf:0:", bufb:"CxVarBuf:1"}
+        { n: 1, bufa:"WrsBuf:0", bufb:"WrsBuf:1"}
 
         Binary message sent is:
         - JSON chunk
@@ -15,11 +15,11 @@
         Browser decodes message as:
         { n: 1, bufa:<array buffer>, bufb:<array buffer>}
 
-    Browser sends to server:
+    Browser app sends to server:
         { n: 1, bufa:<typed array>, bufb:<typed array>}
 
-        Is encoded as JSON as:
-        { n: 1, bufa: "Buf0", bufb: "Buf1"}
+        Is encoded by browser as JSON as:
+        { n: 1, bufa: "WrsBuf:0", bufb: "WrsBuf:"}
 
         Binary message sent is:
         - JSON chunk
@@ -30,10 +30,17 @@
         { n: 1, bufa:<CxVarBuf>, bufb:<CxVarBuf>}
 
     Each chunk consists of a header, data and padding
-        - Chunk type (uint32_t)
-        - Chunk size (uint32_t)
-        - Chunk data
-        - padding to align to multiple of 4
+        - Chunk 0:
+            - type (uint32_t)
+            - size (uint32_t)
+            - data
+            - padding to align to multiple of 4
+        ...
+        - Chunk N:
+            - type (uint32_t)
+            - size (uint32_t)
+            - data
+            - padding to align to multiple of 4
 
 */
 #include <stddef.h>
