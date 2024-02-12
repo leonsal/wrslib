@@ -66,7 +66,7 @@ int main(int argc, const char* argv[]) {
         .staticfs_data       = gStaticfsZipData,
         .staticfs_len        = gStaticfsZipSize,
         .browser = {
-            .start = true,
+            .start = false,
             .standard = false,
             .cmd_line = {"google-chrome --app="},
         },
@@ -212,11 +212,11 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
 
 static int cmd_call(Cli* cli, void* udata) {
 
-    // AppState* app = udata;
-    // const size_t connid = 0;
-    // CxVar* params = wrs_rpc_get_params(app->rpc1, connid);
-    // wrs_rpc_call(app->rpc1, 0, "sum_array", params, NULL);
-    return CliOk;
+   AppState* app = udata;
+   const size_t connid = 0;
+   CxVar* params = cx_var_new(cxDefaultAllocator());
+   wrs_rpc_call(app->rpc1, connid, "sum_array", params, NULL);
+   return CliOk;
 }
 
 

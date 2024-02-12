@@ -218,29 +218,31 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
         WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
         return 1;
     }
-   
+  
     // Sets the message envelope
-    CxVar* map = cx_var_set_map(client->txmsg);
-    cx_var_set_map_int(map, "cid", client->cid);
-    cx_var_set_map_str(map, "call", remote_name);
-    cx_var_set_map_val(map, "params", params);
+    CxVar* msg = cx_var_new(cx_var_allocator(params));
+    cx_var_set_map(msg);
+    int64_t cid = client->cid++;
+    cx_var_set_map_int(msg, "cid", cid);
+    cx_var_set_map_str(msg, "call", remote_name);
+    cx_var_set_map_val(msg, "params", params);
 
     // Encodes message
-    res = wrs_encoder_enc(client->enc, client->txmsg);
+    res = wrs_encoder_enc(client->enc, msg);
     if (res) {
         WRS_LOGE("%s: error encoding message", __func__);
-        return 0;
+        return 1;
     }
 
     // Get encoded message type and buffer
     bool text;
     size_t len;
-    void* msg = wrs_encoder_get_msg(client->enc, &text, &len);
+    void* encoded = wrs_encoder_get_msg(client->enc, &text, &len);
     int opcode = text ? MG_WEBSOCKET_OPCODE_TEXT : MG_WEBSOCKET_OPCODE_BINARY;
 
     // Sends response to remote client
     mg_lock_connection((struct mg_connection*)client->conn);
-    res = mg_websocket_write((struct mg_connection*)client->conn, opcode, msg, len);
+    res = mg_websocket_write((struct mg_connection*)client->conn, opcode, encoded, len);
     mg_unlock_connection((struct mg_connection*)client->conn);
     if (res <= 0) {
         WRS_LOGE("%s: error:%d writing websocket message", __func__, res);
@@ -251,6 +253,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     if (cb) {
         ResponseInfo rinfo = {.fn = cb };
         clock_gettime(CLOCK_REALTIME, &rinfo.time);
+        map_resp_set(&client->responses, cid, rinfo);
     }
 
     return 0;  
