@@ -37,9 +37,9 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
 static int cmd_call(Cli* cli, void* udata);
 
 #define CHKT(COND) \
-    { if (!COND) {fprintf(stderr, "ERROR %s/line:%d\n", __func__, __LINE__); abort();}}
+    { if (!COND) {fprintf(stderr, "CHK ERROR: %s:%d/%s()\n", __FILE__, __LINE__, __func__); abort();}}
 #define CHKF(COND) \
-    { if (COND) {fprintf(stderr, "ERROR %s/line:%d\n", __func__, __LINE__); abort();}}
+    { if (COND) {fprintf(stderr, "CHK ERROR: %s:%d/%s()\n", __FILE__, __LINE__, __func__); abort();}}
 
 int main(int argc, const char* argv[]) {
 
