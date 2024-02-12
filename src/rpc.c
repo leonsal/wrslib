@@ -47,8 +47,8 @@ typedef struct RpcClient {
     struct mg_connection*   conn;           // CivitWeb server WebSocket client connection
     CxPoolAllocator*        pa;             // Pool allocator for this connection
     const CxAllocator*      alloc;          // Allocator interface for Pool Allocator
-    CxVar*                  rxmsg;            
-    CxVar*                  txmsg;
+    CxVar*                  rxmsg;          // Receive parameters
+    CxVar*                  txmsg;          // Send parameters
     WrsDecoder*             dec;            // Message decoder
     WrsEncoder*             enc;            // Message encoder
     uint64_t                cid;            // Next call id
@@ -123,8 +123,9 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     return handler;
 }
 
-void  wrs_rpc_close(WrsRpc* rpc) {
+void wrs_rpc_close(WrsRpc* rpc) {
 
+    // TODO destroy all connections ?
     mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
     pthread_mutex_destroy(&rpc->lock);
 }
@@ -155,6 +156,34 @@ int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
     map_bind_del(&rpc->binds, remote_name);
     return 0;
 }
+
+CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid) {
+
+//     // Checks if this connection id is valid
+//     assert(pthread_mutex_lock(&rpc->lock) == 0);
+//     CxVar* params = NULL;
+//     if (connid >= arr_conn_len(&rpc->conns)) {
+//         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
+//         goto exit;
+//     }
+//
+//     // Get the RPC client associated with this connection id and checks if it is active.
+//     RpcClient* client = &rpc->conns.data[connid];
+//     if (client->conn == NULL) {
+//         WRS_LOGW("%s: connection:%zu is closed", __func__, connid);
+//         goto exit;
+//     }
+//
+//     params = client->txmsg;
+//
+// exit:
+//     assert(pthread_mutex_unlock(&rpc->lock) == 0);
+//     return params;
+return NULL;
+}
+
+
+int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
 
 
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {

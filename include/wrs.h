@@ -111,6 +111,10 @@ int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name);
 // resp - response message
 typedef int (*WrsResponseFn)(WrsRpc* rpc, size_t connid, const CxVar* resp);
 
+// Get parameters object for RPC endpoint for sending remote call.
+// Returns NULL on error.
+CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid);
+
 // Calls remote function using RPC connection
 // url - identifies the RPC endpoint
 // connid - identifies the specific connection for this endpoint

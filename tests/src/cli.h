@@ -1,9 +1,10 @@
 #ifndef CLI_H
 #define CLI_H
 
-#include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
+
+#include "linenoise.h"
 
 // Result codes returned by cli_parse()
 typedef enum {
