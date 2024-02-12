@@ -340,7 +340,7 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
 
     // Calls local function and if it returns error,
     // does not send any response to remote caller.
-    int res = rinfo->fn(rpc->wrs, rpc->url, connid, params, resp);
+    int res = rinfo->fn(rpc, connid, params, resp);
     if (res) {
         WRS_LOGW("%s: local rpc function returned error", __func__);
         return 0;

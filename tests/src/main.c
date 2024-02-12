@@ -11,10 +11,12 @@ extern const unsigned int  gStaticfsZipSize;
 
 // Test application state
 typedef struct AppState {
-    Cli*    cli;
-    Wrs*    wrs;
-    int    server_port;        // HTTP server listening port
-    bool   use_staticfs;       // Use external app file system for development
+    Cli*            cli;
+    Wrs*            wrs;
+    WrsRpc*         rpc1;
+    WrsRpc*         rpc2;
+    int             server_port;        // HTTP server listening port
+    bool            use_staticfs;       // Use external app file system for development
     _Atomic bool    run_server;
     // queue           queue_chartjs;
     // pthread_t       thread_chartjs_id;
@@ -27,6 +29,7 @@ void log_print(wrs_logger* l, CxLogEvent *ev);
 static CliCmd cmds[];
 static int parse_options(int argc, const char* argv[], AppState* apps);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
+static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 
 
 int main(int argc, const char* argv[]) {
@@ -60,8 +63,10 @@ int main(int argc, const char* argv[]) {
         },
     };
 
-    // Creates server
+    // Creates server, rpc endpoints and bindings
     app.wrs = wrs_create(&cfg);
+    app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
+    assert(wrs_rpc_bind(app.rpc1, "get_time", rpc_get_time) == 0);
 
     // Command line loop
     while(!cli_exit(app.cli)) {
@@ -168,4 +173,12 @@ static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev) {
     }
     WRS_LOGD("%s: handler:%s connid:%zu event:%s", __func__, info.url, connid, evname);
 }
+
+static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+
+
+
+    return 0;
+}
+
 
