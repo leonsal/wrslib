@@ -2,6 +2,7 @@
 #include <unistd.h>
 
 #include "argparse.h"
+#include "cli.h"
 #include "wrs.h"
 
 // Static filesystem symbols
@@ -10,6 +11,8 @@ extern const unsigned int  gStaticfsZipSize;
 
 // Test application state
 typedef struct AppState {
+    Cli*    cli;
+    Wrs*    wrs;
     int    server_port;        // HTTP server listening port
     bool   use_staticfs;       // Use external app file system for development
     _Atomic bool    run_server;
@@ -19,31 +22,34 @@ typedef struct AppState {
     // _Atomic bool    run_server;
 } AppState;
 
-// Forward declaration of local functions
+// Forward declarations
+void log_print(wrs_logger* l, CxLogEvent *ev);
+static CliCmd cmds[];
 static int parse_options(int argc, const char* argv[], AppState* apps);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 
 
 int main(int argc, const char* argv[]) {
 
-    // Initializes WRC logger
-    wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
-    wrs_logger_add_handler(&wrs_default_logger, wrs_logger_console_handler, NULL, CX_LOG_DEBUG);
-    WRS_LOGD("WRT tests");
-
-    // Parse command line options
-    AppState apps = {
+    // Initialize app state
+    AppState app = {
         .server_port = 8888,
         .run_server = true,
-        
     };
-    parse_options(argc, argv, &apps);
+    app.cli = cli_create(cmds);
+    parse_options(argc, argv, &app);
+
+    // Initializes WRC logger using special console handler
+    // which prints safely above command line being edited
+    wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
+    wrs_logger_add_handler(&wrs_default_logger, log_print, &app, CX_LOG_DEBUG);
+    WRS_LOGD("WRT tests");
 
     // Sets server config
     WrsConfig cfg = {
         .document_root       = "./src/staticfs",
-        .listening_port      = apps.server_port,
-        .use_staticfs        = apps.use_staticfs,
+        .listening_port      = app.server_port,
+        .use_staticfs        = app.use_staticfs,
         .staticfs_prefix     = "staticfs",
         .staticfs_data       = gStaticfsZipData,
         .staticfs_len        = gStaticfsZipSize,
@@ -55,28 +61,74 @@ int main(int argc, const char* argv[]) {
     };
 
     // Creates server
-    Wrs* wrs = wrs_create(&cfg);
+    app.wrs = wrs_create(&cfg);
 
-    // Creates RPC endpoints
-    WrsRpc* rpc1  = wrs_rpc_open(wrs, "/rpc1", 2, rpc_event);
-    assert(rpc1);
+    // Command line loop
+    while(!cli_exit(app.cli)) {
 
-    // // Set bindings
-    // res = wui_bind_rpc(wa, RPC_URL, "get_time", rpc_get_time);
-    // assert(res == 0);
-    //
-    // res = wui_bind_rpc(wa, RPC_URL, "get_lines", rpc_get_lines);
-
-    // Waits till server is stopped by test UI
-    while (apps.run_server) {
-        sleep(1);
+        // Read command line
+        char* line = cli_get_line(app.cli, ">");
+        if (line == NULL) {
+            break;
+        }
+        // Parse comand line and execute command if possible
+        int res = cli_parse(app.cli, line, &app);
+        if (res == CliEmptyLine) {
+            continue;
+        }
+        if (res == CliInvalidCmd) {
+            printf("Invalid command\n");
+        }
+        if (res < 0) {
+            printf("%s\n", strerror(-res));
+        }
+        // Adds command line to history
+        //linenoiseHistoryAdd(line);
     }
 
-    wrs_destroy(wrs);
+    wrs_destroy(app.wrs);
 
+    //
+    // // Creates RPC endpoints
+    // WrsRpc* rpc1  = wrs_rpc_open(wrs, "/rpc1", 2, rpc_event);
+    // assert(rpc1);
+    //
+    // // // Set bindings
+    // // res = wui_bind_rpc(wa, RPC_URL, "get_time", rpc_get_time);
+    // // assert(res == 0);
+    // //
+    // // res = wui_bind_rpc(wa, RPC_URL, "get_lines", rpc_get_lines);
+    //
+    // // Waits till server is stopped by test UI
+    // while (apps.run_server) {
+    //     sleep(1);
+    // }
+    //
+    // wrs_destroy(wrs);
+    //
     return 0;
 }
 
+void log_print(wrs_logger* l, CxLogEvent *ev) {
+
+    AppState* app = ev->hdata;
+    cli_lock_edit(app->cli);
+    wrs_logger_console_handler(l, ev);
+    cli_unlock_edit(app->cli);
+}
+
+static CliCmd cmds[] = {
+    {
+        .name = "help",
+        .help = "List available commands",
+        .handler = cli_cmd_help,
+    },
+    {
+        .name = "exit",
+        .help = "Exit program",
+        .handler = cli_cmd_exit,
+    },
+};
 
 static int parse_options(int argc, const char* argv[], AppState* apps) {
 
