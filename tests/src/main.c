@@ -81,6 +81,7 @@ int main(int argc, const char* argv[]) {
     // Blocks processing commands
     command_line_loop(&app);
 
+    cli_destroy(app.cli);
     wrs_destroy(app.wrs);
     return 0;
 }
