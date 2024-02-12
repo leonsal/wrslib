@@ -43,10 +43,8 @@ typedef struct ResponseInfo {
 // State for each RPC client
 typedef struct RpcClient {
     struct mg_connection*   conn;           // CivitWeb server WebSocket client connection
-    CxPoolAllocator*        pa;             // Pool allocator for this connection
-    const CxAllocator*      alloc;          // Allocator interface for Pool Allocator
-    CxVar*                  rxmsg;          // Receive parameters
-    CxVar*                  txmsg;          // Send parameters
+    CxVar*                  rxmsg;          // Received msg
+    CxVar*                  txmsg;          // Response msg
     WrsDecoder*             dec;            // Message decoder
     WrsEncoder*             enc;            // Message encoder
     uint64_t                cid;            // Next call id
@@ -193,8 +191,7 @@ CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid) {
         goto exit;
     }
 
-
-    //params = client->txmsg;
+    params = cx_var_new(cxDefaultAllocator());
 
 exit:
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
@@ -202,7 +199,62 @@ exit:
 }
 
 
-int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
+int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb) {
+
+    int res = 0;
+    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+
+    // Checks if this connection id is valid
+    if (connid >= arr_conn_len(&rpc->conns)) {
+        WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
+        assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+        return 1;
+    }
+
+    // Get the RPC client associated with this connection id and checks if it is active.
+    RpcClient* client = &rpc->conns.data[connid];
+    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    if (client->conn == NULL) {
+        WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
+        return 1;
+    }
+   
+    // Sets the message envelope
+    CxVar* map = cx_var_set_map(client->txmsg);
+    cx_var_set_map_int(map, "cid", client->cid);
+    cx_var_set_map_str(map, "call", remote_name);
+    cx_var_set_map_val(map, "params", params);
+
+    // Encodes message
+    res = wrs_encoder_enc(client->enc, client->txmsg);
+    if (res) {
+        WRS_LOGE("%s: error encoding message", __func__);
+        return 0;
+    }
+
+    // Get encoded message type and buffer
+    bool text;
+    size_t len;
+    void* msg = wrs_encoder_get_msg(client->enc, &text, &len);
+    int opcode = text ? MG_WEBSOCKET_OPCODE_TEXT : MG_WEBSOCKET_OPCODE_BINARY;
+
+    // Sends response to remote client
+    mg_lock_connection((struct mg_connection*)client->conn);
+    res = mg_websocket_write((struct mg_connection*)client->conn, opcode, msg, len);
+    mg_unlock_connection((struct mg_connection*)client->conn);
+    if (res <= 0) {
+        WRS_LOGE("%s: error:%d writing websocket message", __func__, res);
+        return 1;
+    }
+
+    // If callback supplied
+    if (cb) {
+        ResponseInfo rinfo = {.fn = cb };
+        clock_gettime(CLOCK_REALTIME, &rinfo.time);
+    }
+
+    return 0;  
+}
 
 
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
@@ -237,20 +289,15 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
     }
 
     // Create new RPC client state
-    CxPoolAllocator* pa = cx_pool_allocator_create(4096, NULL);
-    const CxAllocator* alloc = cx_pool_allocator_iface((CxPoolAllocator*)pa);
     RpcClient new_client = {
         .conn = (struct mg_connection*)conn,
-        .pa = pa,
-        .alloc = alloc,
-        .rxmsg = cx_var_new(alloc),
-        .txmsg = cx_var_new(alloc),
-        .dec = wrs_decoder_new(alloc),
-        .enc = wrs_encoder_new(alloc),
+        .dec = wrs_decoder_new(cxDefaultAllocator()),
+        .enc = wrs_encoder_new(cxDefaultAllocator()),
+        .rxmsg = cx_var_new(cxDefaultAllocator()),
+        .txmsg = cx_var_new(cxDefaultAllocator()),
         .cid = 100,
         .responses = map_resp_init(0),
     };
-    cx_var_set_map(new_client.txmsg);
 
     // Looks for empty slot in the connections array
     // Note that the previous object 'out' and 'callbacks' will
@@ -299,16 +346,20 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
+    int res = 0;
+    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
 
     // Checks connection id and closes connection if invalid.
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: message received with invalid connid:%zu", __func__, connid);
+        assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
         return 0;
     }
 
     // Get the RPC client associated with this connection and
     // closes connection if client is not opened.
     RpcClient* client = &rpc->conns.data[connid];
+    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     if (client->conn == NULL) {
         WRS_LOGW("%s: message received for closed connid:%zu", __func__, connid);
         return 0;
@@ -327,7 +378,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     }
 
     // Decodes message and closes connection if invalid
-    int res = wrs_decoder_dec(client->dec, text, data, dataSize, client->rxmsg);
+    res = wrs_decoder_dec(client->dec, text, data, dataSize, client->rxmsg);
     if (res) {
         WRS_LOGE("%s: received invalid message", __func__);
         return 0;
@@ -345,6 +396,9 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
             return 1;
         }
     }
+
+exit:
+    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     // Close connection
     return 0;
 }
@@ -383,6 +437,7 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     }
 
     // Prepare response
+    cx_var_set_map(client->txmsg);
     cx_var_set_map_int(client->txmsg, "rid", cid);
     CxVar* resp = cx_var_set_map_map(client->txmsg, "resp");
 
@@ -475,7 +530,6 @@ static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_d
 
     // Deallocates all memory used by this client connection and clears the 
     // slot in the connections array, which can be reused for new connections.
-    cx_pool_allocator_free(client->pa);
     memset(client, 0, sizeof(RpcClient));
     rpc->nconns--;
 

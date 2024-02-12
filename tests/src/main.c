@@ -66,7 +66,7 @@ int main(int argc, const char* argv[]) {
         .staticfs_data       = gStaticfsZipData,
         .staticfs_len        = gStaticfsZipSize,
         .browser = {
-            .start = false,
+            .start = true,
             .standard = false,
             .cmd_line = {"google-chrome --app="},
         },
