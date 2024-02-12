@@ -15,7 +15,6 @@
 #   define cx_array_implement
 #endif
 #define cx_array_static
-#define cx_array_instance_allocator
 #include "cx_array.h"
 
 // Define/declare hashmap from URL to WebSocket handler info
@@ -28,14 +27,11 @@
 #ifdef WRS_SERVER_IMPLEMENT
 #   define cx_hmap_implement
 #endif
-#define cx_hmap_instance_allocator
 #include "cx_hmap.h"
 
 // WRC server internal state
 typedef struct Wrs {
     WrsConfig           cfg;            // Copy of user configuration
-    CxPoolAllocator*    pool_alloc;     // Pool allocator 
-    const CxAllocator*  alloc;          // Allocator interface for Pool Allocator
     arr_opt             options;        // Array of server options
     int                 used_port;      // Used TCP/IP listening port
     CxTimer*            tm;             // Timer manager

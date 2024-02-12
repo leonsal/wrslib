@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <unistd.h>
 #include <string.h>
+#include <stdlib.h>
 #include <pthread.h>
 
 #include "civetweb.h"
@@ -23,20 +24,14 @@ static int wrs_start_browser(Wrs* wrs);
 
 Wrs* wrs_create(const WrsConfig* cfg) {
 
-    // Creates allocator to use
-    CxPoolAllocator* pool_alloc = cx_pool_allocator_create(4*1024, NULL);
-    const CxAllocator* alloc = cx_pool_allocator_iface(pool_alloc);
-
     // Creates and initializes internal state
-    Wrs* wrs = cx_alloc_malloc(alloc, sizeof(Wrs));
+    Wrs* wrs = malloc(sizeof(Wrs));
     if (wrs == NULL) {
         return NULL;
     }
     memset(wrs, 0, sizeof(Wrs));
     wrs->cfg = *cfg;
-    wrs->pool_alloc = pool_alloc;
-    wrs->alloc = alloc;
-    wrs->rpc_handlers = map_rpc_init(alloc, 0);
+    wrs->rpc_handlers = map_rpc_init(0);
     assert(pthread_mutex_init(&wrs->lock, NULL) == 0);
 
     // If configured listening port is 0, finds an unused port
@@ -50,16 +45,16 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     }
 
     // Builds server options array
-    wrs->options = arr_opt_init(alloc);
+    wrs->options = arr_opt_init();
     if (cfg->document_root) {
         arr_opt_push(&wrs->options, "document_root");
-        char* document_root = cx_alloc_malloc(alloc, strlen(cfg->document_root)+1);
+        char* document_root = malloc(strlen(cfg->document_root)+1);
         strcpy(document_root, cfg->document_root);
         arr_opt_push(&wrs->options, document_root);
     }
     // Sets listening port
     const size_t size = 32;
-    char* listening_ports = cx_alloc_malloc(alloc, size);
+    char* listening_ports = malloc(size);
     snprintf(listening_ports, size-1, "%u", wrs->used_port);
     arr_opt_push(&wrs->options, "listening_ports");
     arr_opt_push(&wrs->options, listening_ports);
@@ -96,7 +91,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     }
 
     // Creates timer manager
-    wrs->tm = cx_timer_create(wrs->alloc);
+    wrs->tm = cx_timer_create(cxDefaultAllocator());
     if (wrs->tm == NULL) {
         WRS_LOGE("%s: error from cx_timer_create()", __func__);
         return NULL;
@@ -116,13 +111,13 @@ Wrs* wrs_create(const WrsConfig* cfg) {
 // Stops and destroy previously create wrs server
 void  wrs_destroy(Wrs* wrs) {
 
+    // TODO destroy all rpc endpoints
     cx_timer_destroy(wrs->tm);
     mg_stop(wrs->ctx);
     if (wrs->zip) {
         zip_close(wrs->zip);
     }
     assert(pthread_mutex_destroy(&wrs->lock) == 0);
-    cx_pool_allocator_destroy(wrs->pool_alloc);
 }
 
 void wrs_set_userdata(Wrs* wrs, void* userdata) {
