@@ -197,8 +197,8 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
         .alloc = alloc,
         .rxmsg = cx_var_new(alloc),
         .txmsg = cx_var_new(alloc),
-        //.dec = wui_decoder_new(alloc),
-        //.enc = wui_encoder_new(alloc),
+        .dec = wrs_decoder_new(alloc),
+        .enc = wrs_encoder_new(alloc),
         .cid = 100,
         .responses = map_resp_init(rpc->wrs->alloc, 17),
     };

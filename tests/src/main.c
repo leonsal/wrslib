@@ -9,7 +9,7 @@
 extern const unsigned char gStaticfsZipData[];
 extern const unsigned int  gStaticfsZipSize;
 
-// Test application state
+// Spplication state
 typedef struct AppState {
     Cli*            cli;
     Wrs*            wrs;
@@ -25,9 +25,10 @@ typedef struct AppState {
 } AppState;
 
 // Forward declarations
-void log_print(wrs_logger* l, CxLogEvent *ev);
+void log_console_handler(wrs_logger* l, CxLogEvent *ev);
 static CliCmd cmds[];
 static int parse_options(int argc, const char* argv[], AppState* apps);
+static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 
@@ -45,7 +46,7 @@ int main(int argc, const char* argv[]) {
     // Initializes WRC logger using special console handler
     // which prints safely above command line being edited
     wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
-    wrs_logger_add_handler(&wrs_default_logger, log_print, &app, CX_LOG_DEBUG);
+    wrs_logger_add_handler(&wrs_default_logger, log_console_handler, &app, CX_LOG_DEBUG);
     WRS_LOGD("WRT tests");
 
     // Sets server config
@@ -68,53 +69,15 @@ int main(int argc, const char* argv[]) {
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     assert(wrs_rpc_bind(app.rpc1, "get_time", rpc_get_time) == 0);
 
-    // Command line loop
-    while(!cli_exit(app.cli)) {
-
-        // Read command line
-        char* line = cli_get_line(app.cli, ">");
-        if (line == NULL) {
-            break;
-        }
-        // Parse comand line and execute command if possible
-        int res = cli_parse(app.cli, line, &app);
-        if (res == CliEmptyLine) {
-            continue;
-        }
-        if (res == CliInvalidCmd) {
-            printf("Invalid command\n");
-        }
-        if (res < 0) {
-            printf("%s\n", strerror(-res));
-        }
-        // Adds command line to history
-        //linenoiseHistoryAdd(line);
-    }
+    // Blocks processing commands
+    command_line_loop(&app);
 
     wrs_destroy(app.wrs);
-
-    //
-    // // Creates RPC endpoints
-    // WrsRpc* rpc1  = wrs_rpc_open(wrs, "/rpc1", 2, rpc_event);
-    // assert(rpc1);
-    //
-    // // // Set bindings
-    // // res = wui_bind_rpc(wa, RPC_URL, "get_time", rpc_get_time);
-    // // assert(res == 0);
-    // //
-    // // res = wui_bind_rpc(wa, RPC_URL, "get_lines", rpc_get_lines);
-    //
-    // // Waits till server is stopped by test UI
-    // while (apps.run_server) {
-    //     sleep(1);
-    // }
-    //
-    // wrs_destroy(wrs);
-    //
     return 0;
 }
 
-void log_print(wrs_logger* l, CxLogEvent *ev) {
+// Calls the original cx_log console handler 
+void log_console_handler(wrs_logger* l, CxLogEvent *ev) {
 
     AppState* app = ev->hdata;
     cli_lock_edit(app->cli);
@@ -154,6 +117,32 @@ static int parse_options(int argc, const char* argv[], AppState* apps) {
     return 0;
 }
 
+static void command_line_loop(AppState* app) {
+
+    // Command line loop
+    while(!cli_exit(app->cli)) {
+
+        // Read command line
+        char* line = cli_get_line(app->cli, ">");
+        if (line == NULL) {
+            break;
+        }
+        // Parse comand line and execute command if possible
+        int res = cli_parse(app->cli, line, &app);
+        if (res == CliEmptyLine) {
+            continue;
+        }
+        if (res == CliInvalidCmd) {
+            printf("Invalid command\n");
+        }
+        if (res < 0) {
+            printf("%s\n", strerror(-res));
+        }
+        // Adds command line to history
+        //linenoiseHistoryAdd(line);
+    }
+}
+
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev) {
 
     WrsRpcInfo info = info = wrs_rpc_info(rpc);
@@ -176,8 +165,7 @@ static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev) {
 
 static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
-
-
+    cx_var_set_map_int(resp, "data", 42);
     return 0;
 }
 
