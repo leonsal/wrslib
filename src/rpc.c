@@ -17,11 +17,12 @@ typedef struct BindInfo {
 } BindInfo;
 
 // Define internal hashmap from remote name to local rpc function
-#define cx_hmap_name map_bind
-#define cx_hmap_key  const char*
-#define cx_hmap_val  BindInfo
-#define cx_hmap_cmp_key cx_hmap_cmp_key_str_ptr
-#define cx_hmap_hash_key cx_hmap_hash_key_str_ptr
+#define cx_hmap_name                map_bind
+#define cx_hmap_key                 char*
+#define cx_hmap_val                 BindInfo
+#define cx_hmap_cmp_key(k1,k2,s)    strcmp(*(char**)k1,*(char**)k2)
+#define cx_hmap_hash_key(k,s)       cx_hmap_hash_fnv1a32(*((char**)k), strlen(*(char**)k))
+#define cx_hmap_free_key(k)         free(*k)
 #define cx_hmap_implement
 #define cx_hmap_static
 #include "cx_hmap.h"
@@ -31,6 +32,7 @@ typedef struct ResponseInfo {
     WrsResponseFn   fn;     // Function to call when response arrives
     struct timespec time;   // Time when call was sent to client
 } ResponseInfo;
+
 
 // Define map of call id to local rpc callback function pointer
 #define cx_hmap_name map_resp
@@ -92,7 +94,7 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     WrsRpc* handler = NULL;
 
     // Checks if there is already a handler for this url
-    if (map_rpc_get(&wrs->rpc_handlers, url)) {
+    if (map_rpc_get(&wrs->rpc_handlers, (char*)url)) {
         goto exit;
     }
 
@@ -108,9 +110,8 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     };
 
     // Save association of the url with new handler
-    char* key = malloc(strlen(url)+1);
-    strcpy(key, url);
-    map_rpc_set(&wrs->rpc_handlers, key, handler);
+    char* url_key = strdup(url);
+    map_rpc_set(&wrs->rpc_handlers, url_key, handler);
 
     // Register the websocket callback functions.
     mg_set_websocket_handler_with_subprotocols(wrs->ctx, url, &wsprot,
@@ -121,6 +122,7 @@ exit:
     return handler;
 }
 
+
 void wrs_rpc_close(WrsRpc* rpc) {
 
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
@@ -129,12 +131,14 @@ void wrs_rpc_close(WrsRpc* rpc) {
     for (size_t i = 0; i < arr_conn_len(&rpc->conns); i++) {
 
     }
+    // Destroy bindings
+    map_bind_free(&rpc->binds);
 
     // Remove association of url with this RPC handler
-    map_rpc_del(&rpc->wrs->rpc_handlers, rpc->url);
+    map_rpc_del(&rpc->wrs->rpc_handlers, (char*)rpc->url);
 
+    // Remove WebSocket handler
     mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
-    pthread_mutex_destroy(&rpc->wrs->lock);
 
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
 }
@@ -145,15 +149,14 @@ int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
     int res = 0;
 
     // Checks if there is already an association in this handler with the specified remote name
-    BindInfo* bind = map_bind_get(&rpc->binds, remote_name);
+    BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind) {
         res = 1;
         goto exit;
     }
 
     // Maps the remote name with the specified local function
-    char* remote_name_key = malloc(strlen(remote_name)+1);
-    strcpy(remote_name_key, remote_name);
+    char* remote_name_key = strdup(remote_name);
     map_bind_set(&rpc->binds, remote_name_key, (BindInfo){.fn = fn});
 
 exit:
@@ -167,13 +170,13 @@ int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
     int res = 0;
 
     // Checks if there is already an association in this RPC endpoint with the specified remote name
-    BindInfo* bind = map_bind_get(&rpc->binds, remote_name);
+    BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind == NULL) {
         res = 1;
         goto exit;
     }
 
-    map_bind_del(&rpc->binds, remote_name);
+    map_bind_del(&rpc->binds, (char*)remote_name);
 
 exit:
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
@@ -433,7 +436,7 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     }
 
     // Get local function binding for the received "call"
-    BindInfo* rinfo = map_bind_get(&rpc->binds, pcall);
+    BindInfo* rinfo = map_bind_get(&rpc->binds, (char*)pcall);
     if (rinfo == NULL) {
         WRS_LOGE("%s: bind for:%s not found", __func__, pcall);
         return 2;

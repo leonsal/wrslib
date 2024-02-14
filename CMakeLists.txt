@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
-project(wrcproj C)
+project(wrslib C)
 
 #
 # Dependencies
@@ -54,11 +54,11 @@ set(SOURCES
     src/rpc_codec.c
 )
 
-add_library(wrc ${SOURCES})
-target_include_directories(wrc
+add_library(wrs ${SOURCES})
+target_include_directories(wrs
     PUBLIC ${PROJECT_SOURCE_DIR}/include
     PUBLIC ${cxlib_SOURCE_DIR}/include
     PUBLIC ${civetweb_SOURCE_DIR}/include
 )
-target_link_libraries(wrc cxlib civetweb-c-library zip m)
+target_link_libraries(wrs cxlib civetweb-c-library zip m)
 

@@ -19,11 +19,12 @@
 
 // Define/declare hashmap from URL to WebSocket handler info
 // NOTE: it must not be static as 'map_rpc' is also used by 'rpc.c'
-#define cx_hmap_name map_rpc
-#define cx_hmap_key  const char*
-#define cx_hmap_val  WrsRpc*
-#define cx_hmap_cmp_key cx_hmap_cmp_key_str_ptr
-#define cx_hmap_hash_key cx_hmap_hash_key_str_ptr
+#define cx_hmap_name                map_rpc
+#define cx_hmap_key                 char*
+#define cx_hmap_val                 WrsRpc*
+#define cx_hmap_cmp_key(k1,k2,s)    strcmp(*(char**)k1,*(char**)k2)
+#define cx_hmap_hash_key(k,s)       cx_hmap_hash_fnv1a32(*((char**)k), strlen(*(char**)k))
+#define cx_hmap_free_key(k)         free(*k)
 #ifdef WRS_SERVER_IMPLEMENT
 #   define cx_hmap_implement
 #endif

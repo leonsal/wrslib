@@ -44,4 +44,4 @@ target_include_directories(tests
 )
 set_property(TARGET tests PROPERTY C_STANDARD  11)
 target_compile_options(tests PRIVATE -Wall -Wno-unused-function)
-target_link_libraries(tests wrc argparse)
+target_link_libraries(tests wrs argparse)
