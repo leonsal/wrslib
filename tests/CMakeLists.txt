@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
-project(wrctests C)
+project(wrstests C)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -36,7 +36,7 @@ set(SOURCES
     ${linenoise_SOURCE_DIR}/linenoise.c
 )
 
-add_subdirectory(.. wrc)
+add_subdirectory(.. wrs)
 add_executable(tests ${SOURCES})
 target_include_directories(tests
     PUBLIC ${incbin_SOURCE_DIR}
