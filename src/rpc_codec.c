@@ -46,6 +46,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "cx_var.h"
+#include "cx_json_build.h"
+#include "cx_json_parse.h"
+
 // Define internal array for encoded binary data
 #define cx_array_name cxarr_u8
 #define cx_array_type uint8_t
@@ -68,6 +72,15 @@ typedef struct EncBuffer {
 #define cx_array_static
 #include "cx_array.h"
 
+// Define internal array of replaced CxVar for
+// deallocation
+#define cx_array_name cxarr_var
+#define cx_array_type CxVar*
+#define cx_array_implement
+#define cx_array_instance_allocator
+#define cx_array_static
+#include "cx_array.h"
+
 // Binary message chunk header
 typedef struct ChunkHeader {
     uint32_t type;
@@ -79,22 +92,23 @@ typedef struct WrsEncoder {
     const CxAllocator* alloc;
     cxarr_u8    encoded;    // Buffer with encoded message chunks
     cxarr_buf   buffers;    // Array of buffers to encode
+    cxarr_var   vars;       // Replaced vars
 } WrsEncoder;
 
-#include "cx_var.h"
-#include "cx_json_parse.h"
 
 #define CHUNK_ALIGNMENT sizeof(uint32_t)
 
-static int enc_json(WrsEncoder* e, CxVar* msg);
-static int enc_json_null(WrsEncoder* e, const CxVar* var);
-static int enc_json_bool(WrsEncoder* e, const CxVar* var);
-static int enc_json_int(WrsEncoder* e, const CxVar* var);
-static int enc_json_float(WrsEncoder* e, const CxVar* var);
-static int enc_json_str(WrsEncoder* e, const CxVar* var);
-static int enc_json_arr(WrsEncoder* e, const CxVar* var);
-static int enc_json_map(WrsEncoder* e, const CxVar* var);
-static int enc_json_buf(WrsEncoder* e, const CxVar* var);
+static int enc_writer(void* ctx, const void* data, size_t len);
+static CxVar* enc_json_replacer(CxVar* val, void* userdata);
+// static int enc_json(WrsEncoder* e, CxVar* msg);
+// static int enc_json_null(WrsEncoder* e, const CxVar* var);
+// static int enc_json_bool(WrsEncoder* e, const CxVar* var);
+// static int enc_json_int(WrsEncoder* e, const CxVar* var);
+// static int enc_json_float(WrsEncoder* e, const CxVar* var);
+// static int enc_json_str(WrsEncoder* e, const CxVar* var);
+// static int enc_json_arr(WrsEncoder* e, const CxVar* var);
+// static int enc_json_map(WrsEncoder* e, const CxVar* var);
+// static int enc_json_buf(WrsEncoder* e, const CxVar* var);
 static uintptr_t align_forward(uintptr_t ptr, size_t align);
 static void add_padding(WrsEncoder*e, size_t align);
 
@@ -106,6 +120,7 @@ WrsEncoder* wrs_encoder_new(const CxAllocator* alloc) {
     e->alloc = alloc;
     e->encoded = cxarr_u8_init(alloc); 
     e->buffers = cxarr_buf_init(alloc);
+    e->vars = cxarr_var_init(alloc);
     return e;
 }
 
@@ -113,6 +128,7 @@ void wrs_encoder_del(WrsEncoder* e) {
 
     cxarr_u8_free(&e->encoded);
     cxarr_buf_free(&e->buffers);
+    cxarr_var_free(&e->vars);
     cx_alloc_free(e->alloc, e, sizeof(WrsEncoder));
 }
 
@@ -121,6 +137,7 @@ void wrs_encoder_clear(WrsEncoder* e) {
 
     cxarr_u8_clear(&e->encoded);
     cxarr_buf_clear(&e->buffers);
+    cxarr_var_clear(&e->vars);
 }
 
 int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
@@ -134,7 +151,9 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
     cxarr_u8_pushn(&e->encoded, (uint8_t*)&header, sizeof(ChunkHeader));
 
     // Encodes JSON
-    int res = enc_json(e, msg);
+    CxJsonBuildCfg cfg = { .replacer_fn = enc_json_replacer, .replacer_data = e };
+    CxWriter writer = {.ctx = e, .write = (CxWriterWrite)enc_writer};
+    int res = cx_json_build(msg, &cfg, &writer); 
     if (res) {
         return res;
     }
@@ -268,179 +287,37 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
 // Local functions
 //-----------------------------------------------------------------------------
 
-int enc_json(WrsEncoder* e, CxVar* var) {
 
-    int res;
-    switch(cx_var_get_type(var)) {
-        case CxVarNull:
-            res = enc_json_null(e, var);
-            break;
-        case CxVarBool:
-            res = enc_json_bool(e, var);
-            break;
-        case CxVarInt:
-            res = enc_json_int(e, var);
-            break;
-        case CxVarFloat:
-            res = enc_json_float(e, var);
-            break;
-        case CxVarStr:
-            res = enc_json_str(e, var);
-            break;
-        case CxVarArr:
-            res = enc_json_arr(e, var);
-            break;
-        case CxVarMap:
-            res = enc_json_map(e, var);
-            break;
-        case CxVarBuf:
-            res = enc_json_buf(e, var);
-            break;
-        default:
-            return 1;
+static int enc_writer(void* ctx, const void* data, size_t len) {
+
+    WrsEncoder* e = ctx;
+    cxarr_u8_pushn(&e->encoded, (char*)data, len);
+    return len;
+}
+
+static CxVar* enc_json_replacer(CxVar* var, void* userdata) {
+
+    WrsEncoder* e = userdata;
+    if (cx_var_get_type(var) != CxVarBuf) {
+        return var;
     }
-    if (res < 0) {
-        return 1;
-    }
-    return 0;
-}
-
-static int enc_json_null(WrsEncoder* e, const CxVar* var) {
-
-    cxarr_u8_pushn(&e->encoded, (uint8_t*)"null", 4);
-    return 0;
-}
-
-static int enc_json_bool(WrsEncoder* e, const CxVar* var) {
-
-    bool val;
-    cx_var_get_bool(var, &val);
-    if (val) {
-        cxarr_u8_pushn(&e->encoded, (uint8_t*)"true", 4);
-    } else {
-        cxarr_u8_pushn(&e->encoded, (uint8_t*)"false", 5);
-    }
-    return 0;
-}
-
-static int enc_json_int(WrsEncoder* e, const CxVar* var) {
-
-    int64_t val;
-    cx_var_get_int(var, &val);
-    char fmtbuf[256];
-    sprintf(fmtbuf, "%zd", val);
-    cxarr_u8_pushn(&e->encoded, (uint8_t*)fmtbuf, strlen(fmtbuf));
-    return 0;
-}
-
-static int enc_json_float(WrsEncoder* e, const CxVar* var) {
-
-    double val;
-    cx_var_get_float(var, &val);
-    char fmtbuf[256];
-    sprintf(fmtbuf, "%f", val);
-    cxarr_u8_pushn(&e->encoded, (uint8_t*)fmtbuf, strlen(fmtbuf));
-    return 0;
-}
-
-static int enc_json_str(WrsEncoder* e, const CxVar* var) {
-
-    const char* str;
-    cx_var_get_str(var, &str);
-
-    size_t len = strlen(str);
-    cxarr_u8_push(&e->encoded, '\"');
-    for (size_t i = 0; i < len; i++) {
-        int c = str[i];
-        switch (c) {
-            case '"':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\\"", 2);
-                break;
-            case '\\':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\\\", 2);
-                break;
-            case '\b':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\b", 2);
-                break;
-            case '\f':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\f", 2);
-                break;
-            case '\n':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\n", 2);
-                break;
-            case '\r':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\r", 2);
-                break;
-            case '\t':
-                cxarr_u8_pushn(&e->encoded, (uint8_t*)"\\t", 2);
-                break;
-            default:
-                cxarr_u8_push(&e->encoded, c);
-                break;
-        }
-    }
-    cxarr_u8_push(&e->encoded, '\"');
-    return 0;
-}
-
-static int enc_json_arr(WrsEncoder* e, const CxVar* var) {
-
-    size_t len;
-    cx_var_get_arr_len(var, &len);
-    cxarr_u8_push(&e->encoded, '[');
-    for (size_t i = 0; i < len; i++) {
-        CxVar* el = cx_var_get_arr_val(var, i);
-        enc_json(e, el);
-        if (i < len - 1) {
-            cxarr_u8_push(&e->encoded, ',');
-        }
-    }
-    cxarr_u8_push(&e->encoded, ']');
-    return 0;
-}
-
-static int enc_json_map(WrsEncoder* e, const CxVar* var) {
-
-    size_t count;
-    cx_var_get_map_len(var, &count);
-    size_t order = 0;
-    cxarr_u8_push(&e->encoded, '{');
-    while (true) {
-        const char* key = cx_var_get_map_key(var, order);
-        if (key == NULL) {
-             break;
-        }
-        CxVar* value = cx_var_get_map_val(var, key);
-        if (value == NULL) {
-            break;
-        }
-        cxarr_u8_push(&e->encoded, '\"');
-        cxarr_u8_pushn(&e->encoded, (uint8_t*)key, strlen(key));
-        cxarr_u8_pushn(&e->encoded, (uint8_t*)"\":", 2);
-        enc_json(e, value);
-        if (order < count - 1) {
-            cxarr_u8_push(&e->encoded, ',');
-        }
-        order++;
-    }
-    cxarr_u8_push(&e->encoded, '}');
-    return 0;
-}
-
-static int enc_json_buf(WrsEncoder* e, const CxVar* var) {
+    printf("CxVarBuf\n");
 
     // Get buffer data and len and saves into internal array
-    EncBuffer buffer;
-    cx_var_get_buf(var, &buffer.data, &buffer.len);
-    cxarr_buf_push(&e->buffers, buffer);
+    // EncBuffer buffer;
+    // cx_var_get_buf(var, &buffer.data, &buffer.len);
+    // cxarr_buf_push(&e->buffers, buffer);
 
-    // Encodes as the number of the buffer
-    size_t nbufs = cxarr_buf_len(&e->buffers);
-    char fmtbuf[256];
-    sprintf(fmtbuf, "%zu", nbufs);
-    cxarr_u8_pushn(&e->encoded, (uint8_t*)fmtbuf, strlen(fmtbuf));
-    return 0;
+    int64_t nbufs = cxarr_buf_len(&e->buffers);
+    char fmtbuf[32];
+    //snprintf(fmtbuf, sizeof(fmtbuf), "CxVarBuf:%ld", nbufs-1);
+    snprintf(fmtbuf, sizeof(fmtbuf), "CxVarBuf:%ld", nbufs);
+    CxVar* replaced = cx_var_new(cxDefaultAllocator());
+    cx_var_set_str(replaced, fmtbuf);
+    cxarr_var_push(&e->vars, replaced);
+    return replaced;
 }
+
 
 // Returns the aligned pointer for the specified pointer and desired alignment
 static uintptr_t align_forward(uintptr_t ptr, size_t align) {
