@@ -219,8 +219,8 @@ static int cmd_call(Cli* cli, void* udata) {
    CxVar* params = cx_var_new(cxDefaultAllocator());
    cx_var_set_map(params);
    cx_var_set_map_int(params, "int", 1);
-   cx_var_set_map_buf(params, "buf0", (uint8_t[]){0,1,2,3}, 4);
-   cx_var_set_map_buf(params, "buf1", (uint8_t[]){0,0}, 2);
+   cx_var_set_map_buf(params, "buf0", (uint8_t[]){0xF0,0xF1,0xF2}, 3);
+   cx_var_set_map_buf(params, "buf1", (uint8_t[]){0xF3,0xF4,0xF5}, 3);
 
    wrs_rpc_call(app->rpc1, connid, "sum_array", params, NULL);
    cx_var_del(params);

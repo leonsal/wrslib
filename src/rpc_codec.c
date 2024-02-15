@@ -150,14 +150,22 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
         return res;
     }
 
-    // Sets the msg size in the first chunk
+    // Sets the msg size in the first chunk and adds padding
     uint32_t msg_size = cxarr_u8_len(&e->encoded) - sizeof(ChunkHeader);
     ((ChunkHeader*)e->encoded.data)->size = msg_size;
+    add_padding(e, CHUNK_ALIGNMENT);
 
     // Appends binary buffers to encoded data
     for (size_t i = 0; i < cxarr_buf_len(&e->buffers); i++) {
 
+        // Writes the chunk header
+        EncBuffer* buf = &e->buffers.data[i];
+        header = (ChunkHeader){.type = WrsChunkBuf, .size = buf->len };
+        cxarr_u8_pushn(&e->encoded, (uint8_t*)&header, sizeof(ChunkHeader));
 
+        // Writes the chunk data and padding
+        cxarr_u8_pushn(&e->encoded, (uint8_t*)buf->data, buf->len);
+        add_padding(e, CHUNK_ALIGNMENT);
     }
 
     return 0;

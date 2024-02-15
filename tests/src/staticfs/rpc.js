@@ -21,6 +21,8 @@
 // Binary chunk types
 const ChunkTypeMsg    = 1;
 const ChunkTypeBuffer = 2;
+const BufferPrefix = "\b\b\b\b\b\b";
+
 const BufferTypes = new Map()
 BufferTypes.set('ArrayBuffer',  true);
 BufferTypes.set('Int8Array',    true);
@@ -263,21 +265,39 @@ export class RPC extends EventTarget {
 
     #onMessage(ev) {
 
-        console.log("onMessage", typeof(ev.data), ev.data instanceof ArrayBuffer);
         if (typeof(ev.data) == 'string') {
-            this.#onMessageText(ev); 
+            this.#decodeJSON(ev.data); 
         } else {
-            this.#onMessageBin(ev);
+            this.#decodeBinMsg(ev);
         }
-
-
-
-
     }
 
-    #onMessageText(ev) {
+    #decodeJSON(msgString, buffers=null) {
 
-        const msg = JSON.parse(ev.data);
+        // Decodes JSON string
+        let msg = null;
+        if (!buffers) {
+             msg = JSON.parse(msgString);
+        } else {
+            msg = JSON.parse(msgString, (_, value) => {
+                if (typeof(value) != 'string') {
+                    return value;
+                }
+                if (!value.startsWith(BufferPrefix)) {
+                    return value;
+                }
+                const bufnStr = value.slice(BufferPrefix.length);
+                const bufn = parseInt(bufnStr);
+                if (bufn >= buffers.length) {
+                    console.log("reviver: invalid buffer number:", bufn);
+                    return undefined;
+                }
+                console.log("reviver: ", bufn, buffers[bufn]);
+                return buffers[bufn];
+            });
+        }
+        console.log("msg", msg);
+
         // Checks for response id from previous call
         if (msg.rid !== undefined) {
             // Get associated callback
@@ -329,7 +349,7 @@ export class RPC extends EventTarget {
         console.log("RPC invalid JSON call or response");
     }
 
-    #onMessageBin(ev) {
+    #decodeBinMsg(ev) {
 
         const msg = ev.data;
         const fieldSize = 4;
@@ -338,8 +358,9 @@ export class RPC extends EventTarget {
         const last = ev.data.byteLength;
         let curr = 0;
         let json_text = null;
+        let buffers = [];
     
-        while (true) {
+        while (curr != last) {
             // Checks for available size for a chunk header
             if (last - curr < headerSize) {
                 console.log("no space for header");
@@ -365,18 +386,26 @@ export class RPC extends EventTarget {
                 const decoder = new TextDecoder(); // UTF-8
                 json_text = decoder.decode(chunkView);
                 console.log("TEXT", json_text); 
+            } else
             // Decodes Buffer chunk
-            } else if (chunkType == ChunkTypeBuffer) {
-                const buf = msg.slice(curr, chunkLen);
-                console.log("buf", buf);
+            if (chunkType == ChunkTypeBuffer) {
+                const buf = msg.slice(curr, curr + chunkLen);
+                buffers.push(buf);
+                console.log("buf", curr, chunkLen, buf);
             } else {
                 console.log("invalid chunk type", chunkType);
                 return;
             }
+
+            // Prepares for next chunk
             curr += chunkLen;
             curr = alignOffset(curr);
-            console.log(curr, last);
         }
+        if (json_text === null) {
+            console.log("NO JSON message received");
+        }
+        // Decode JSON with associated buffers
+        this.#decodeJSON(json_text, buffers);
     }
 
 
