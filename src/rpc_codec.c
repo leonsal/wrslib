@@ -96,19 +96,11 @@ typedef struct WrsEncoder {
 } WrsEncoder;
 
 
+#define BUFFER_PREFIX   "\b\b\b\b\b\b"
 #define CHUNK_ALIGNMENT sizeof(uint32_t)
 
 static int enc_writer(void* ctx, const void* data, size_t len);
 static CxVar* enc_json_replacer(CxVar* val, void* userdata);
-// static int enc_json(WrsEncoder* e, CxVar* msg);
-// static int enc_json_null(WrsEncoder* e, const CxVar* var);
-// static int enc_json_bool(WrsEncoder* e, const CxVar* var);
-// static int enc_json_int(WrsEncoder* e, const CxVar* var);
-// static int enc_json_float(WrsEncoder* e, const CxVar* var);
-// static int enc_json_str(WrsEncoder* e, const CxVar* var);
-// static int enc_json_arr(WrsEncoder* e, const CxVar* var);
-// static int enc_json_map(WrsEncoder* e, const CxVar* var);
-// static int enc_json_buf(WrsEncoder* e, const CxVar* var);
 static uintptr_t align_forward(uintptr_t ptr, size_t align);
 static void add_padding(WrsEncoder*e, size_t align);
 
@@ -301,17 +293,16 @@ static CxVar* enc_json_replacer(CxVar* var, void* userdata) {
     if (cx_var_get_type(var) != CxVarBuf) {
         return var;
     }
-    printf("CxVarBuf\n");
 
     // Get buffer data and len and saves into internal array
-    // EncBuffer buffer;
-    // cx_var_get_buf(var, &buffer.data, &buffer.len);
-    // cxarr_buf_push(&e->buffers, buffer);
+    EncBuffer buffer;
+    cx_var_get_buf(var, &buffer.data, &buffer.len);
+    cxarr_buf_push(&e->buffers, buffer);
 
+    // Replaces buffer with string with special prefix and buffer number
     int64_t nbufs = cxarr_buf_len(&e->buffers);
     char fmtbuf[32];
-    //snprintf(fmtbuf, sizeof(fmtbuf), "CxVarBuf:%ld", nbufs-1);
-    snprintf(fmtbuf, sizeof(fmtbuf), "CxVarBuf:%ld", nbufs);
+    snprintf(fmtbuf, sizeof(fmtbuf), BUFFER_PREFIX"%ld", nbufs-1);
     CxVar* replaced = cx_var_new(cxDefaultAllocator());
     cx_var_set_str(replaced, fmtbuf);
     cxarr_var_push(&e->vars, replaced);
