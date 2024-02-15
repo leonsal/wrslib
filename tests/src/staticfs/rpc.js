@@ -19,8 +19,8 @@
 // }
 
 // Binary chunk types
-const ChunkMsg    = 1;
-const ChunkBuffer = 2;
+const ChunkTypeMsg    = 1;
+const ChunkTypeBuffer = 2;
 const BufferTypes = new Map()
 BufferTypes.set('ArrayBuffer',  true);
 BufferTypes.set('Int8Array',    true);
@@ -73,6 +73,7 @@ export class RPC extends EventTarget {
         // Open web socket connection with server using the supplied relative URL
         const url = 'ws://' + document.location.host + "/" + this.#url;
         this.#socket = new WebSocket(url);
+        this.#socket.binaryType = 'arraybuffer';
 
         // Sets event handlers
         this.#socket.onopen    = ev => this.#onOpen(ev);
@@ -166,7 +167,7 @@ export class RPC extends EventTarget {
 
         // JSON header
         let byteOffset = 0;
-        msgView.setUint32(byteOffset, ChunkMsg, true);
+        msgView.setUint32(byteOffset, ChunkTypeMsg, true);
         byteOffset += 4;
         msgView.setUint32(byteOffset, json_bytes.byteLength, true);
         byteOffset += 4;
@@ -182,7 +183,7 @@ export class RPC extends EventTarget {
             const buffer = buffers[i];
             const bufU8 = new Uint8Array(buffer.buffer);
             // Buffer header
-            msgView.setUint32(byteOffset, ChunkBuffer, true);
+            msgView.setUint32(byteOffset, ChunkTypeBuffer, true);
             byteOffset += 4;
             msgView.setUint32(byteOffset, buffer.byteLength, true);
             byteOffset += 4;
@@ -262,6 +263,20 @@ export class RPC extends EventTarget {
 
     #onMessage(ev) {
 
+        console.log("onMessage", typeof(ev.data), ev.data instanceof ArrayBuffer);
+        if (typeof(ev.data) == 'string') {
+            this.#onMessageText(ev); 
+        } else {
+            this.#onMessageBin(ev);
+        }
+
+
+
+
+    }
+
+    #onMessageText(ev) {
+
         const msg = JSON.parse(ev.data);
         // Checks for response id from previous call
         if (msg.rid !== undefined) {
@@ -313,6 +328,57 @@ export class RPC extends EventTarget {
         }
         console.log("RPC invalid JSON call or response");
     }
+
+    #onMessageBin(ev) {
+
+        const msg = ev.data;
+        const fieldSize = 4;
+        const headerSize = 2 * fieldSize;
+        const msgView = new DataView(msg);
+        const last = ev.data.byteLength;
+        let curr = 0;
+        let json_text = null;
+    
+        while (true) {
+            // Checks for available size for a chunk header
+            if (last - curr < headerSize) {
+                console.log("no space for header");
+                return;
+            }
+
+            // Get the chunk type and length in bytes
+            const chunkType = msgView.getInt32(curr, true);
+            curr += fieldSize;
+            const chunkLen = msgView.getInt32(curr, true);
+            curr += fieldSize;
+            console.log("header", chunkType, chunkLen);
+
+            // Checks chunk length
+            if (chunkLen > last - curr) {
+                console.log("invalid chunk length", chunkLen);
+                return;
+            }
+
+            // Decodes JSON chunk
+            if (chunkType == ChunkTypeMsg) {
+                const chunkView = new DataView(msg, curr, chunkLen);
+                const decoder = new TextDecoder(); // UTF-8
+                json_text = decoder.decode(chunkView);
+                console.log("TEXT", json_text); 
+            // Decodes Buffer chunk
+            } else if (chunkType == ChunkTypeBuffer) {
+                const buf = msg.slice(curr, chunkLen);
+                console.log("buf", buf);
+            } else {
+                console.log("invalid chunk type", chunkType);
+                return;
+            }
+            curr += chunkLen;
+            curr = alignOffset(curr);
+            console.log(curr, last);
+        }
+    }
+
 
     // Public static properties
     static EV_OPENED    = "rpc.opened";
