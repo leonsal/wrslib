@@ -105,11 +105,11 @@ int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn local_fn);
 int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name);
 
 // Type for RPC response function
-// ep - endpoint from which the response arrived
-// url - identifies the RPC endpoint
+// rpc - RPC endpoint from which the response arrived
 // connid - identifies the connection id
 // resp - response message
-typedef int (*WrsResponseFn)(WrsRpc* rpc, size_t connid, const CxVar* resp);
+// Returns zero to keep the connection open
+typedef int (*WrsResponseFn)(WrsRpc* rpc, size_t connid, CxVar* resp);
 
 // Calls remote function using RPC connection
 // url - identifies the RPC endpoint

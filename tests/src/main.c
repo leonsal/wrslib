@@ -34,7 +34,9 @@ static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
-static int cmd_call(Cli* cli, void* udata);
+static int cmd_test_bin(Cli* cli, void* udata);
+static void call_test_bin(WrsRpc* rpc, size_t connid, size_t size);
+static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
 
 #define CHKT(COND) \
     { if (!COND) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
@@ -107,9 +109,9 @@ static CliCmd cmds[] = {
         .handler = cli_cmd_exit,
     },
     {
-        .name = "call",
-        .help = "Call browser func",
-        .handler = cmd_call,
+        .name = "test_bin",
+        .help = "Test calling browser with binary arrays",
+        .handler = cmd_test_bin,
     },
 };
 
@@ -212,19 +214,54 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
     return 0;
 }
 
-static int cmd_call(Cli* cli, void* udata) {
+static int cmd_test_bin(Cli* cli, void* udata) {
 
    AppState* app = udata;
-   const size_t connid = 0;
+   call_test_bin(app->rpc1, 0, 10);
+   return CliOk;
+}
+
+static void call_test_bin(WrsRpc* rpc, size_t connid, size_t size) {
+
+    uint32_t* arru32 = malloc(size * sizeof(uint32_t));
+    for (size_t i = 0; i < size; i++) {
+        arru32[i] = i;
+    }
+
+    float* arrf32 = malloc(size * sizeof(float));
+    for (size_t i = 0; i < size; i++) {
+        arrf32[i] = i*2;
+    }
+
+    double* arrf64 = malloc(size * sizeof(double));
+    for (size_t i = 0; i < size; i++) {
+        arrf64[i] = i*2;
+    }
+
    CxVar* params = cx_var_new(cxDefaultAllocator());
    cx_var_set_map(params);
-   cx_var_set_map_int(params, "int", 1);
-   cx_var_set_map_buf(params, "buf0", (uint8_t[]){0xF0,0xF1,0xF2}, 3);
-   cx_var_set_map_buf(params, "buf1", (uint8_t[]){0xF3,0xF4,0xF5}, 3);
+   cx_var_set_map_buf(params, "u32", arru32, size * sizeof(uint32_t));
+   cx_var_set_map_buf(params, "f32", arrf32, size * sizeof(float));
+   cx_var_set_map_buf(params, "f64", arrf64, size * sizeof(double));
 
-   wrs_rpc_call(app->rpc1, connid, "sum_array", params, NULL);
+   wrs_rpc_call(rpc, connid, "test_bin", params, resp_test_bin);
    cx_var_del(params);
-   return CliOk;
+}
+
+static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
+
+    WRS_LOGD("response");
+    CxVar* data = cx_var_get_map_val(resp, "data");
+    if (data == NULL) {
+        WRS_LOGE("%s: data field not found", __func__);
+        return 1;
+    }
+
+    const uint32_t* u32;
+    size_t u32_len;
+    CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
+
+    return 0;
 }
 
 

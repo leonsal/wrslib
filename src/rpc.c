@@ -352,7 +352,6 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
-    int res = 0;
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
 
     // Checks connection id and closes connection if invalid.
@@ -384,7 +383,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     }
 
     // Decodes message and closes connection if invalid
-    res = wrs_decoder_dec(client->dec, text, data, dataSize, client->rxmsg);
+    int res = wrs_decoder_dec(client->dec, text, data, dataSize, client->rxmsg);
     if (res) {
         WRS_LOGE("%s: received invalid message", __func__);
         return 0;
@@ -402,9 +401,6 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
             return 1;
         }
     }
-
-exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     // Close connection
     return 0;
 }
@@ -421,7 +417,6 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     // params:  <any>
     int64_t cid;
     if (!cx_var_get_map_int(rxmsg, "cid", &cid)) {
-        WRS_LOGE("%s: 'cid' field not found", __func__);
         return 1;
     }
     const char* pcall;
@@ -483,32 +478,32 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
 // Returns 1 for other errors
 static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* msg) {
 
-    // // The response message body must have the following format:
-    // // { rid: <number>, resp: {err: <any> OR data: <any>}}
-    // WuiDecoderVal* msg = wui_get_msg(client->dec);
-    // int64_t rid;
-    // int res = wui_get_map_int(msg, "rid", &rid);
-    // if (res) {
-    //     WRS_LOGE("%s: response with missing 'rid' field", __func__);
-    //     return 1;
-    // }
-    //
-    // // Get the response field
-    // WuiDecoderVal* resp;
-    // res = wui_get_map_val(msg, "resp", &resp);
-    // if (res) {
-    //     WRS_LOGE("%s: response with missing 'resp' field", __func__);
-    //     return 1;
-    // }
-    //
-    // // Get information for the local callback for this response
-    // CallbackInfo* cb_info = map_cb_get(&client->callbacks, rid);
-    // if (cb_info == NULL) {
-    //     WRS_LOGE("%s: response with no callback connid:%zu rid:%zu", __func__, connid, rid);
-    //     return 1;
-    // }
-    // cb_info->cb(rpc->wui, rpc->url, connid, resp);
-    return 0;
+    // The response message body must have the following format:
+    // { rid: <number>, resp: {err: <any> OR data: <any>}}
+    int64_t rid;
+    if (!cx_var_get_map_int(msg, "rid", &rid)) {
+        WRS_LOGE("%s: response with missing 'rid' field", __func__);
+        return 1;
+    }
+
+    // Get the response field
+    CxVar* resp = cx_var_get_map_val(msg, "resp");
+    if (resp == NULL) {
+        WRS_LOGE("%s: response with missing 'resp' field", __func__);
+        return 1;
+    }
+    
+    // Get information for the local callback for this response
+    ResponseInfo* info = map_resp_get(&client->responses, rid);
+    if (info == NULL) {
+        WRS_LOGE("%s: response with no callback connid:%zu rid:%zu", __func__, connid, rid);
+        return 1;
+    }
+
+    // Removes response callback association and calls response callback
+    // The response callback should return 0 to keep the connection open.
+    map_resp_del(&client->responses, rid);
+    return info->fn(rpc, connid, resp);
 }
 
 // Handler called when RPC client connection is closed.

@@ -372,7 +372,6 @@ export class RPC extends EventTarget {
             curr += fieldSize;
             const chunkLen = msgView.getInt32(curr, true);
             curr += fieldSize;
-            console.log("header", chunkType, chunkLen);
 
             // Checks chunk length
             if (chunkLen > last - curr) {
@@ -385,13 +384,11 @@ export class RPC extends EventTarget {
                 const chunkView = new DataView(msg, curr, chunkLen);
                 const decoder = new TextDecoder(); // UTF-8
                 json_text = decoder.decode(chunkView);
-                console.log("TEXT", json_text); 
             } else
-            // Decodes Buffer chunk
+            // Decodes Buffer chunk and saves in buffers array
             if (chunkType == ChunkTypeBuffer) {
                 const buf = msg.slice(curr, curr + chunkLen);
                 buffers.push(buf);
-                console.log("buf", curr, chunkLen, buf);
             } else {
                 console.log("invalid chunk type", chunkType);
                 return;
@@ -401,8 +398,10 @@ export class RPC extends EventTarget {
             curr += chunkLen;
             curr = alignOffset(curr);
         }
+
         if (json_text === null) {
             console.log("NO JSON message received");
+            return;
         }
         // Decode JSON with associated buffers
         this.#decodeJSON(json_text, buffers);

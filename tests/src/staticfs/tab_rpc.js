@@ -1,7 +1,25 @@
 import * as App from "./app.js";
 import {RPC} from "./rpc.js";
 
-const VIEW_ID = "tab.wsocket";
+const VIEW_ID = "tab.rpc";
+
+// Set the menu option ids
+const optionClear       = "rpc.clear";
+const optionOpen        = "rpc.open";
+const optionClose       = "rpc.close";
+const optionGetTime     = "rpc.get_time";
+const optionGetLines1   = "rpc.get_lines1";
+const optionGetLines2   = "rpc.get_lines2";
+const optionGetLines3   = "rpc.get_lines3";
+const optionCallClient  = "rpc.call_client";
+const optionSumBinArray = "rpc.sum_bin_array";
+
+// Builds map of menu option id to function handler
+const optionMap = new Map();
+
+// Creates RPC manager
+const RPC_URL = "/rpc1";
+const rpc = new RPC(RPC_URL);
 
 function logEvent(msg) {
 
@@ -26,12 +44,12 @@ function logRPC(ev) {
 
 function getLines(count, len) {
 
-    const emsg = App.rpc.call("get_lines", {count, len}, (resp)=> {
+    const emsg = rpc.call("get_lines", {count, len}, (resp)=> {
         if (resp.err) {
             logEvent(`ERROR: ${resp.err}`);
             return;
         }
-        const elapsed = App.rpc.lastCallElapsed();
+        const elapsed = rpc.lastCallElapsed();
         const lines = resp.data;
         let lineCount = 0;
         let colLen = 0;
@@ -46,44 +64,51 @@ function getLines(count, len) {
     }
 }
 
-App.rpc.bind("client_callback", function(params) {
+rpc.bind("test_bin", function(params) {
+
+    console.log("test_bin", params);
+
+    const u32 = new Uint32Array(params.u32);
+    for (let i = 0; i < u32.length; i++) {
+        u32[i] += 1;
+    }
+
+    const f32 = new Float32Array(params.f32);
+    for (let i = 0; i < f32.length; i++) {
+        f32[i] += 2;
+    }
+
+    const f64 = new Float64Array(params.f64);
+    for (let i = 0; i < f64.length; i++) {
+        f64[i] += 3;
+    }
+
+    return {data: {u32, f32, f64}};
+});
+
+rpc.bind("client_callback", function(params) {
 
     logEvent(`client_callback: ${params}`);
     return {data: 'client_callback_response'};
 });
-
-// Set the menu option ids
-const optionClear       = "rpc.clear";
-const optionOpen        = "rpc.open";
-const optionClose       = "rpc.close";
-const optionGetTime     = "rpc.get_time";
-const optionGetLines1   = "rpc.get_lines1";
-const optionGetLines2   = "rpc.get_lines2";
-const optionGetLines3   = "rpc.get_lines3";
-const optionCallClient  = "rpc.call_client";
-
-const optionSumBinArray = "rpc.sum_bin_array";
-
-// Builds map of menu option id to function handler
-const optionMap = new Map();
 
 optionMap.set(optionClear, function() {
     $$('list.wsocket').clearAll();
 });
 
 optionMap.set(optionOpen, function() {
-    const emsg = App.rpc.open();
+    const emsg = rpc.open();
     if (emsg) {
         logEvent(emsg);
         return;
     }
-    App.rpc.addEventListener(RPC.EV_OPENED, logRPC);
-    App.rpc.addEventListener(RPC.EV_CLOSED, logRPC);
-    App.rpc.addEventListener(RPC.EV_ERROR, logRPC);
+    rpc.addEventListener(RPC.EV_OPENED, logRPC);
+    rpc.addEventListener(RPC.EV_CLOSED, logRPC);
+    rpc.addEventListener(RPC.EV_ERROR, logRPC);
 });
 
 optionMap.set(optionClose, function() {
-    const emsg = App.rpc.close();
+    const emsg = rpc.close();
     if (emsg) {
         logEvent(emsg);
         return;
@@ -92,12 +117,12 @@ optionMap.set(optionClose, function() {
 
 optionMap.set(optionGetTime, function() {
 
-    const emsg = App.rpc.call("get_time", null, (resp)=> {
+    const emsg = rpc.call("get_time", null, (resp)=> {
         if (resp.err) {
             logEvent("ERROR", resp.err);
             return;
         }
-        const elapsed = App.rpc.lastCallElapsed();
+        const elapsed = rpc.lastCallElapsed();
         logEvent(`${resp.data}  elapsed:${elapsed.toFixed(3)}ms`);
     });
     if (emsg) {
@@ -112,7 +137,7 @@ optionMap.set(optionGetLines3, () => getLines(10000, 1024));
 
 optionMap.set(optionCallClient, () => {
 
-    const emsg = App.rpc.call("call_client", {name: 'client_callback', value: 42}, (resp)=> {
+    const emsg = rpc.call("call_client", {name: 'client_callback', value: 42}, (resp)=> {
         if (resp.err) {
             logEvent(`ERROR: ${emsg}`);
             return;
@@ -128,31 +153,31 @@ optionMap.set(optionSumBinArray, () => {
 
     console.log("------------------------------------");
 
-    const buf1 = new Uint8Array(3);
-    for (let i  = 0; i < buf1.length; i++) {
-        buf1[i] = i + 10;
-    }
-    const buf2 = new Uint16Array(3);
-    for (let i  = 0; i < buf2.length; i++) {
-        buf2[i] = i + 10;
-    }
-    const buf3 = new Uint32Array(3);
-    for (let i  = 0; i < buf3.length; i++) {
-        buf3[i] = i + 10;
-    }
-    const buf4 = new Float32Array(3);
-    for (let i  = 0; i < buf4.length; i++) {
-        buf4[i] = i + 10;
-    }
-    const buf5 = new Float64Array(3);
-    for (let i  = 0; i < buf5.length; i++) {
-        buf5[i] = i + 10;
-    }
-    const emsg = App.rpc.call_bin("sum_bin_array", {array:0}, [buf1, buf2, buf3, buf4, buf5], (resp)=> {
-    });
-    if (emsg) {
-        logEvent(`ERROR: ${emsg}`);
-    }
+    // const buf1 = new Uint8Array(3);
+    // for (let i  = 0; i < buf1.length; i++) {
+    //     buf1[i] = i + 10;
+    // }
+    // const buf2 = new Uint16Array(3);
+    // for (let i  = 0; i < buf2.length; i++) {
+    //     buf2[i] = i + 10;
+    // }
+    // const buf3 = new Uint32Array(3);
+    // for (let i  = 0; i < buf3.length; i++) {
+    //     buf3[i] = i + 10;
+    // }
+    // const buf4 = new Float32Array(3);
+    // for (let i  = 0; i < buf4.length; i++) {
+    //     buf4[i] = i + 10;
+    // }
+    // const buf5 = new Float64Array(3);
+    // for (let i  = 0; i < buf5.length; i++) {
+    //     buf5[i] = i + 10;
+    // }
+    // const emsg = rpc.call_bin("sum_bin_array", {array:0}, [buf1, buf2, buf3, buf4, buf5], (resp)=> {
+    // });
+    // if (emsg) {
+    //     logEvent(`ERROR: ${emsg}`);
+    // }
 });
 
 // Returns this tab view
