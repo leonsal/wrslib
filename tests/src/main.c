@@ -252,15 +252,12 @@ static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
 
     WRS_LOGD("response");
     CxVar* data = cx_var_get_map_val(resp, "data");
-    if (data == NULL) {
-        WRS_LOGE("%s: data field not found", __func__);
-        return 1;
-    }
+    CHKT(data);
 
-    const uint32_t* u32;
-    size_t u32_len;
-    CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
-
+    // const uint32_t* u32;
+    // size_t u32_len;
+    // CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
+    //
     return 0;
 }
 

@@ -22,6 +22,8 @@
 const ChunkTypeMsg    = 1;
 const ChunkTypeBuffer = 2;
 const BufferPrefix = "\b\b\b\b\b\b";
+const ChunkHeaderFieldSize = 4;
+const ChunkHeaderSize = 2 * ChunkHeaderFieldSize;
 
 const BufferTypes = new Map()
 BufferTypes.set('ArrayBuffer',  true);
@@ -263,6 +265,77 @@ export class RPC extends EventTarget {
         setTimeout(this.#retryMS, this.open);
     }
 
+    // Encodes and sends call or response message
+    #sendMsg(msg) {
+  
+        // Stringify JSON replacing references to arraybuffers or typed arrays
+        // fields to a special string plus the buffer number.
+        const buffers = [];
+        const json = JSON.stringify(msg, (_, value) => {
+            if (!checkBuffer(value)) {
+                return value;
+            }
+            buffers.push(value);
+            const replaced = BufferPrefix + (buffers.length-1).toString();
+            console.log("replaced", replaced, typeof(replaced));
+            return replaced;
+        });
+        console.log("stringify", json);
+
+        // If no buffers found in the message, send as a simple text message.
+        if (buffers.length == 0) {
+            this.#socket.send(json);
+            return;
+        }
+
+        // Converts JSON string to typed array
+        const encoder = new TextEncoder();
+        const json_bytes = encoder.encode(json);
+
+        // Calculates the total length in bytes of the data to send
+        let totalLength = ChunkHeaderSize + json_bytes.byteLength;
+        totalLength = alignOffset(totalLength);
+        for (let i = 0; i < buffers.length; i++) {
+            totalLength += ChunkHeaderSize + buffers[i].byteLength;
+            totalLength = alignOffset(totalLength);
+        }
+        console.log("totalByteLength", totalLength);
+
+        // Allocates message buffer with total size required
+        const msgBuffer = new ArrayBuffer(totalLength);
+        const msgView = new DataView(msgBuffer);
+        const msgU8 = new Uint8Array(msgBuffer);
+
+        // JSON header
+        let offset = 0;
+        msgView.setUint32(offset, ChunkTypeMsg, true);
+        offset += ChunkHeaderFieldSize;
+        msgView.setUint32(offset, json_bytes.byteLength, true);
+        offset += ChunkHeaderFieldSize;
+
+        // JSON data
+        msgU8.set(json_bytes, offset);
+        offset += json_bytes.byteLength;
+        offset = alignOffset(offset);
+        console.log("offset", offset);
+        
+        // Buffers
+        for (let i = 0; i < buffers.length; i++) {
+            const buffer = buffers[i];
+            const bufU8 = new Uint8Array(buffer.buffer);
+            // Buffer header
+            msgView.setUint32(offset, ChunkTypeBuffer, true);
+            offset += ChunkHeaderFieldSize;
+            msgView.setUint32(offset, buffer.byteLength, true);
+            offset += ChunkHeaderFieldSize;
+            // Buffer data
+            msgU8.set(bufU8, offset);
+            offset += buffer.byteLength;
+            offset = alignOffset(offset);
+        }
+        this.#socket.send(msgBuffer);
+    }
+
     #onMessage(ev) {
 
         if (typeof(ev.data) == 'string') {
@@ -333,7 +406,7 @@ export class RPC extends EventTarget {
                 console.log(`RPC remote call ${msg.call} not binded`);
                 return;
             }
-            // Calls local function and if function returnsd result,
+            // Calls local function and if function returns result,
             // sends response back to caller
             const result = localFn(msg.params);
             if (result !== undefined) {
@@ -341,8 +414,7 @@ export class RPC extends EventTarget {
                     rid: msg.cid,
                     resp: result,
                 }
-                const json = JSON.stringify(resp);
-                this.#socket.send(json);
+                this.#sendMsg(resp);
             }
             return;
         }
@@ -352,8 +424,6 @@ export class RPC extends EventTarget {
     #decodeBinMsg(ev) {
 
         const msg = ev.data;
-        const fieldSize = 4;
-        const headerSize = 2 * fieldSize;
         const msgView = new DataView(msg);
         const last = ev.data.byteLength;
         let curr = 0;
@@ -362,16 +432,16 @@ export class RPC extends EventTarget {
     
         while (curr != last) {
             // Checks for available size for a chunk header
-            if (last - curr < headerSize) {
+            if (last - curr < ChunkHeaderSize) {
                 console.log("no space for header");
                 return;
             }
 
             // Get the chunk type and length in bytes
             const chunkType = msgView.getInt32(curr, true);
-            curr += fieldSize;
+            curr += ChunkHeaderFieldSize;
             const chunkLen = msgView.getInt32(curr, true);
-            curr += fieldSize;
+            curr += ChunkHeaderFieldSize;
 
             // Checks chunk length
             if (chunkLen > last - curr) {

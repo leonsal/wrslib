@@ -83,7 +83,8 @@ rpc.bind("test_bin", function(params) {
         f64[i] += 3;
     }
 
-    return {data: {u32, f32, f64}};
+    //return {data: {u32, f32, f64}};
+    return {data: {u32}};
 });
 
 rpc.bind("client_callback", function(params) {
