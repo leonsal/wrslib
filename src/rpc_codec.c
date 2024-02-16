@@ -269,7 +269,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
             //     .data = p,
             // });
         } else {
-           return 1;
+            return 1;
         }
 
         // Advance pointer to start of next possible chunk
