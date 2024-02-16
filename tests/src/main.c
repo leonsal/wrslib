@@ -224,29 +224,33 @@ static int cmd_test_bin(Cli* cli, void* udata) {
 
 static void call_test_bin(WrsRpc* rpc, size_t connid, size_t size) {
 
-    uint32_t* arru32 = malloc(size * sizeof(uint32_t));
+    // Create parameters with non-initialized buffers
+    CxVar* params = cx_var_new(cxDefaultAllocator());
+    cx_var_set_map(params);
+    cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
+    cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
+    cx_var_set_map_buf(params, "f64", NULL, size * sizeof(double));
+
+    // Get buffers and initialize them
+    size_t len;
+    uint32_t* arru32;
+    cx_var_get_map_buf(params, "u32", (void*)&arru32, &len);
     for (size_t i = 0; i < size; i++) {
-        arru32[i] = i;
+         arru32[i] = i;
+    }
+    float* arrf32;
+    cx_var_get_map_buf(params, "f32", (void*)&arrf32, &len);
+    for (size_t i = 0; i < size; i++) {
+         arrf32[i] = i*2;
+    }
+    double* arrf64;
+    cx_var_get_map_buf(params, "f64", (void*)&arrf64, &len);
+    for (size_t i = 0; i < size; i++) {
+         arrf64[i] = i*2;
     }
 
-    float* arrf32 = malloc(size * sizeof(float));
-    for (size_t i = 0; i < size; i++) {
-        arrf32[i] = i*2;
-    }
-
-    double* arrf64 = malloc(size * sizeof(double));
-    for (size_t i = 0; i < size; i++) {
-        arrf64[i] = i*2;
-    }
-
-   CxVar* params = cx_var_new(cxDefaultAllocator());
-   cx_var_set_map(params);
-   cx_var_set_map_buf(params, "u32", arru32, size * sizeof(uint32_t));
-   cx_var_set_map_buf(params, "f32", arrf32, size * sizeof(float));
-   cx_var_set_map_buf(params, "f64", arrf64, size * sizeof(double));
-
-   wrs_rpc_call(rpc, connid, "test_bin", params, resp_test_bin);
-   cx_var_del(params);
+    wrs_rpc_call(rpc, connid, "test_bin", params, resp_test_bin);
+    cx_var_del(params);
 }
 
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {

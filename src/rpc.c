@@ -236,10 +236,11 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     // Sets the message envelope
     CxVar* msg = cx_var_new(cx_var_allocator(params));
     cx_var_set_map(msg);
-    int64_t cid = client->cid++;
+    int64_t cid = client->cid;
     cx_var_set_map_int(msg, "cid", cid);
     cx_var_set_map_str(msg, "call", remote_name);
     cx_var_set_map_val(msg, "params", params);
+    client->cid++;
 
     // Encodes message
     res = wrs_encoder_enc(client->enc, msg);
@@ -254,7 +255,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     void* encoded = wrs_encoder_get_msg(client->enc, &text, &len);
     int opcode = text ? MG_WEBSOCKET_OPCODE_TEXT : MG_WEBSOCKET_OPCODE_BINARY;
 
-    // Sends response to remote client
+    // Sends message to remote client
     mg_lock_connection((struct mg_connection*)client->conn);
     res = mg_websocket_write((struct mg_connection*)client->conn, opcode, encoded, len);
     mg_unlock_connection((struct mg_connection*)client->conn);
@@ -263,7 +264,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
         return 1;
     }
 
-    // If callback supplied
+    // If callback supplied, saves information to map response to the callback
     if (cb) {
         ResponseInfo rinfo = {.fn = cb };
         clock_gettime(CLOCK_REALTIME, &rinfo.time);
