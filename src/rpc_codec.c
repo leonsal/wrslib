@@ -58,22 +58,21 @@
 #define cx_array_static
 #include "cx_array.h"
 
-// Describe a binary buffer to encode
-typedef struct EncBuffer {
+// Describe a binary buffer to encode/decoded
+typedef struct BufInfo {
     const void* data;
     size_t      len;
-} EncBuffer;
+} BufInfo;
 
 // Define internal array of encoded buffers info
 #define cx_array_name cxarr_buf
-#define cx_array_type EncBuffer
+#define cx_array_type BufInfo
 #define cx_array_implement
 #define cx_array_instance_allocator
 #define cx_array_static
 #include "cx_array.h"
 
-// Define internal array of replaced CxVar for
-// deallocation
+// Define internal array of CxVar*
 #define cx_array_name cxarr_var
 #define cx_array_type CxVar*
 #define cx_array_implement
@@ -125,7 +124,6 @@ void wrs_encoder_del(WrsEncoder* e) {
     cx_alloc_free(e->alloc, e, sizeof(WrsEncoder));
 }
 
-
 void wrs_encoder_clear(WrsEncoder* e) {
 
     cxarr_u8_clear(&e->encoded);
@@ -160,7 +158,7 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
     for (size_t i = 0; i < cxarr_buf_len(&e->buffers); i++) {
 
         // Writes the chunk header
-        EncBuffer* buf = &e->buffers.data[i];
+        BufInfo* buf = &e->buffers.data[i];
         header = (ChunkHeader){.type = WrsChunkBuf, .size = buf->len };
         cxarr_u8_pushn(&e->encoded, (uint8_t*)&header, sizeof(ChunkHeader));
 
@@ -201,6 +199,8 @@ void* wrs_encoder_get_msg(WrsEncoder* e, bool* text, size_t* len) {
 // Decoder state
 typedef struct WrsDecoder {
     const CxAllocator* alloc;   // Custom allocator
+    cxarr_buf   buffers;        // Array of decoded buffers
+    cxarr_var   vars;           // Array of CxVar buffers
 } WrsDecoder;
 
 
@@ -208,20 +208,23 @@ WrsDecoder* wrs_decoder_new(const CxAllocator* alloc) {
 
     WrsDecoder* d = cx_alloc_malloc(alloc, sizeof(WrsDecoder));
     d->alloc = alloc;
+    d->buffers = cxarr_buf_init(alloc);
+    d->vars = cxarr_var_init(alloc);
     return d;
 }
 
 void wrs_decoder_del(WrsDecoder* d) {
 
+    cxarr_buf_free(&d->buffers);
+    cxarr_var_free(&d->vars);
     cx_alloc_free(d->alloc, d, sizeof(WrsDecoder));
 }
 
-void wrs_decoder_clear(WrsDecoder* e) {
+void wrs_decoder_clear(WrsDecoder* d) {
 
-    //arr_buf_clear(&d->buffers);
-
+    cxarr_buf_clear(&d->buffers);
+    cxarr_var_clear(&d->vars);
 }
-
 
 int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg) {
 
@@ -239,22 +242,22 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
 
     // Decode the message chunks in any order
     void* last = data + len;
-    void* p = data;
+    void* curr = data;
     bool json = false;
-    while (true) {
+    while (curr < last) {
         // Checks available size for chunk header
-        if (p + sizeof(uint32_t)*2 > last) {
+        if (curr + sizeof(uint32_t)*2 > last) {
             return 1;
         }
 
         // Get the chunk type and length in bytes
-        uint32_t chunk_type = *(uint32_t*)p;
-        p += sizeof(uint32_t);
-        uint32_t chunk_len = *(uint32_t*)p;
-        p += sizeof(uint32_t);
+        uint32_t chunk_type = *(uint32_t*)curr;
+        curr += sizeof(uint32_t);
+        uint32_t chunk_len = *(uint32_t*)curr;
+        curr += sizeof(uint32_t);
 
         // Checks available size for chunk data
-        if (p + chunk_len > last) {
+        if (curr + chunk_len > last) {
             return 1;
         }
 
@@ -265,29 +268,30 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
             if (json) {
                 return 1;
             }
-            int res =cx_json_parse(p, chunk_len, msg, &cfg);
+            int res =cx_json_parse(curr, chunk_len, msg, &cfg);
             if (res) {
                 return res;
             }
         // Checks for Buffer chunk
         } else if (chunk_type == WrsChunkBuf) {
-            // arr_buf_push(&d->buffers, (BufInfo){
-            //     .type = 1,
-            //     .len = chunk_len,
-            //     .data = p,
-            // });
+            cxarr_buf_push(&d->buffers, (BufInfo){
+                 .len = chunk_len,
+                 .data = curr,
+            });
+        // Invalid chunk type
         } else {
             return 1;
         }
 
         // Advance pointer to start of next possible chunk
-        p += chunk_len;
-        p = (void*)align_forward((uintptr_t)p, 4);
-        if (p == last) {
-            return 0;
-        }
+        curr += chunk_len;
+        curr = (void*)align_forward((uintptr_t)curr, 4);
     }
-    return 1;
+
+    if (curr != last) {
+        return 1;
+    }
+    return 0;
 }
 
 //-----------------------------------------------------------------------------
@@ -310,7 +314,7 @@ static CxVar* enc_json_replacer(CxVar* var, void* userdata) {
     }
 
     // Get buffer data and len and saves into internal array
-    EncBuffer buffer;
+    BufInfo buffer;
     cx_var_get_buf(var, &buffer.data, &buffer.len);
     cxarr_buf_push(&e->buffers, buffer);
 
