@@ -60,8 +60,8 @@
 
 // Describe a binary buffer to encode/decoded
 typedef struct BufInfo {
-    const void* data;
-    size_t      len;
+    void*   data;
+    size_t  len;
 } BufInfo;
 
 // Define internal array of encoded buffers info
@@ -91,7 +91,7 @@ typedef struct WrsEncoder {
     const CxAllocator* alloc;
     cxarr_u8    encoded;    // Buffer with encoded message chunks
     cxarr_buf   buffers;    // Array of buffers to encode
-    cxarr_var   vars;       // Replaced vars
+    //cxarr_var   vars;       // Replaced vars
 } WrsEncoder;
 
 
@@ -99,7 +99,7 @@ typedef struct WrsEncoder {
 #define CHUNK_ALIGNMENT sizeof(uint32_t)
 
 static int enc_writer(void* ctx, const void* data, size_t len);
-static CxVar* enc_json_replacer(CxVar* val, void* userdata);
+static void enc_json_replacer(CxVar* val, void* userdata);
 static uintptr_t align_forward(uintptr_t ptr, size_t align);
 static void add_padding(WrsEncoder*e, size_t align);
 static void dec_json_replacer(CxVar* val, void* userdata);
@@ -112,7 +112,7 @@ WrsEncoder* wrs_encoder_new(const CxAllocator* alloc) {
     e->alloc = alloc;
     e->encoded = cxarr_u8_init(alloc); 
     e->buffers = cxarr_buf_init(alloc);
-    e->vars = cxarr_var_init(alloc);
+    //e->vars = cxarr_var_init(alloc);
     return e;
 }
 
@@ -120,7 +120,7 @@ void wrs_encoder_del(WrsEncoder* e) {
 
     cxarr_u8_free(&e->encoded);
     cxarr_buf_free(&e->buffers);
-    cxarr_var_free(&e->vars);
+    //cxarr_var_free(&e->vars);
     cx_alloc_free(e->alloc, e, sizeof(WrsEncoder));
 }
 
@@ -128,7 +128,7 @@ void wrs_encoder_clear(WrsEncoder* e) {
 
     cxarr_u8_clear(&e->encoded);
     cxarr_buf_clear(&e->buffers);
-    cxarr_var_clear(&e->vars);
+    //cxarr_var_clear(&e->vars);
 }
 
 int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
@@ -165,6 +165,12 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
         // Writes the chunk data and padding
         cxarr_u8_pushn(&e->encoded, (uint8_t*)buf->data, buf->len);
         add_padding(e, CHUNK_ALIGNMENT);
+    }
+
+    // Free buffers
+    for (size_t i = 0; i < cxarr_buf_len(&e->buffers); i++) {
+        BufInfo* buf = &e->buffers.data[i];
+        cx_alloc_free(e->alloc, buf->data, buf->len);
     }
 
     return 0;
@@ -317,26 +323,30 @@ static int enc_writer(void* ctx, const void* data, size_t len) {
     return len;
 }
 
-static CxVar* enc_json_replacer(CxVar* var, void* userdata) {
+static void enc_json_replacer(CxVar* var, void* userdata) {
 
-    WrsEncoder* e = userdata;
     if (cx_var_get_type(var) != CxVarBuf) {
-        return var;
+        return;
     }
 
-    // Get buffer data and len and saves into internal array
-    BufInfo buffer;
-    cx_var_get_buf(var, &buffer.data, &buffer.len);
+    // Get buffer data and len, makes a copy and saves into internal array
+    WrsEncoder* e = userdata;
+    const void* data;
+    size_t len;
+    cx_var_get_buf(var, &data, &len);
+    BufInfo buffer = {
+        .data = cx_alloc_malloc(e->alloc, len),
+        .len = len,
+    };
+    memcpy(buffer.data, data, len);
     cxarr_buf_push(&e->buffers, buffer);
 
-    // Replaces buffer with string with special prefix and buffer number
+    // Replaces CxVar buffer with string with special prefix and buffer number
+    // This will deallocate its CxVar buffer.
     int64_t nbufs = cxarr_buf_len(&e->buffers);
     char fmtbuf[32];
     snprintf(fmtbuf, sizeof(fmtbuf), BUFFER_PREFIX"%ld", nbufs-1);
-    CxVar* replaced = cx_var_new(cxDefaultAllocator());
-    cx_var_set_str(replaced, fmtbuf);
-    cxarr_var_push(&e->vars, replaced);
-    return replaced;
+    cx_var_set_str(var, fmtbuf);
 }
 
 
