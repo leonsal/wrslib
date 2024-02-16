@@ -53,11 +53,6 @@ Wrs* wrs_create(const WrsConfig* cfg);
 // Stops and destroy previously create WRS server
 void wrs_destroy(Wrs* wrs); 
 
-// Sets user data associated with this server
-void wrs_set_userdata(Wrs* wrs, void* userdata); 
-
-// Get previously set userdata associated with server.
-void* wrs_get_userdata(Wrs* wrs);
 
 // Type for local C functions called by remote clients
 // rpc - pointer to RPC endpoint which received the message
@@ -90,6 +85,12 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
 // rpc - Pointer to the RPC endpoint
 // Returns non zero error code on errors.
 void  wrs_rpc_close(WrsRpc* rpc);
+
+// Sets user data associated with this RPC endpoint
+void wrs_rpc_set_userdata(WrsRpc* rpc, void* userdata); 
+
+// Get previously set userdata associated with this RPC endpoint
+void* wrs_rpc_get_userdata(WrsRpc* rpc);
 
 // Binds a local C function to be called by remote client using RPC.
 // Only one function can be binded to a remote name.

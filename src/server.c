@@ -120,15 +120,6 @@ void  wrs_destroy(Wrs* wrs) {
     assert(pthread_mutex_destroy(&wrs->lock) == 0);
 }
 
-void wrs_set_userdata(Wrs* wrs, void* userdata) {
-
-    wrs->userdata = userdata;
-}
-
-void* wrs_get_userdata(Wrs* wrs) {
-
-    return wrs->userdata;
-}
 
 
 

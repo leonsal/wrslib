@@ -254,10 +254,10 @@ static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
     CxVar* data = cx_var_get_map_val(resp, "data");
     CHKT(data);
 
-    // const uint32_t* u32;
-    // size_t u32_len;
-    // CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
-    //
+    const uint32_t* u32;
+    size_t u32_len;
+    CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
+    
     return 0;
 }
 

@@ -287,10 +287,21 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
         curr += chunk_len;
         curr = (void*)align_forward((uintptr_t)curr, 4);
     }
-
+   
+    // Checks for exact length of binary message
     if (curr != last) {
         return 1;
     }
+
+    // Converts decoded string CxVars to corresponding buffers
+    if (cxarr_var_len(&d->vars) != cxarr_buf_len(&d->buffers)) {
+        return 1;
+    }
+    for (size_t i = 0; i < cxarr_var_len(&d->vars); i++) {
+        BufInfo* buf = &d->buffers.data[i];
+        cx_var_set_buf(d->vars.data[i], (void*)buf->data, buf->len);
+    }
+
     return 0;
 }
 
@@ -366,10 +377,10 @@ static void dec_json_replacer(CxVar* var, void* userdata) {
         return;
     }
 
-    WrsDecoder* e = userdata;
+    WrsDecoder* d = userdata;
     ssize_t nbuf = strtol(str + strlen(BUFFER_PREFIX), NULL, 10);
     printf("buffer:%ld\n", nbuf);
-
+    cxarr_var_push(&d->vars, var);
 }
 
 

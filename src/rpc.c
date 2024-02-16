@@ -69,6 +69,7 @@ typedef struct WrsRpc {
     arr_conn            conns;          // Array of connections info
     map_bind            binds;          // Map remote name to local bind info
     WrsEventCallback    evcb;           // Optional user event callback
+    void*               userdata;       // Optional user data
 } WrsRpc;
 
 
@@ -141,6 +142,16 @@ void wrs_rpc_close(WrsRpc* rpc) {
     mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
 
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+}
+
+void wrs_rpc_set_userdata(WrsRpc* rpc, void* userdata) {
+
+    rpc->userdata = userdata;
+}
+
+void* wrs_rpc_get_userdata(WrsRpc* rpc) {
+
+    return rpc->userdata;
 }
 
 int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
