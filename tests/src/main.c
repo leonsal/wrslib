@@ -77,6 +77,7 @@ int main(int argc, const char* argv[]) {
     // Creates server, rpc endpoints and bindings
     app.wrs = wrs_create(&cfg);
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
+    wrs_rpc_set_userdata(app.rpc1, &app);
     CHKF(wrs_rpc_bind(app.rpc1, "get_time", rpc_get_time));
     CHKF(wrs_rpc_bind(app.rpc1, "get_lines", rpc_get_lines));
 
