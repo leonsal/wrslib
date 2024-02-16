@@ -103,7 +103,7 @@ static int enc_writer(void* ctx, const void* data, size_t len);
 static CxVar* enc_json_replacer(CxVar* val, void* userdata);
 static uintptr_t align_forward(uintptr_t ptr, size_t align);
 static void add_padding(WrsEncoder*e, size_t align);
-static void dec_json_replacer(CxVar** val, void* userdata);
+static void dec_json_replacer(CxVar* val, void* userdata);
 
 #include "rpc_codec.h"
 
@@ -241,7 +241,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
     void* last = data + len;
     void* p = data;
     bool json = false;
-    while (1) {
+    while (true) {
         // Checks available size for chunk header
         if (p + sizeof(uint32_t)*2 > last) {
             return 1;
@@ -283,7 +283,6 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
         // Advance pointer to start of next possible chunk
         p += chunk_len;
         p = (void*)align_forward((uintptr_t)p, 4);
-        // Checks for more chunks
         if (p == last) {
             return 0;
         }
@@ -352,17 +351,20 @@ static void add_padding(WrsEncoder*e, size_t align) {
     cxarr_u8_pushn(&e->encoded, (char*)padbytes, npaddings);
 }
 
-static void dec_json_replacer(CxVar** var, void* userdata) {
+static void dec_json_replacer(CxVar* var, void* userdata) {
 
-    // if (cx_var_get_type(*var) != CxVarStr) {
-    //     return;
-    // }
-    // const char* str;
-    // cx_var_get_str(*var, &str);
-    // if (strncmp(str, BUFFER_PREFIX, strlen(BUFFER_PREFIX)) != 0) {
-    //     return;
-    // }
-    //
+    if (cx_var_get_type(var) != CxVarStr) {
+        return;
+    }
+    const char* str;
+    cx_var_get_str(var, &str);
+    if (strncmp(str, BUFFER_PREFIX, strlen(BUFFER_PREFIX)) != 0) {
+        return;
+    }
+
+    WrsDecoder* e = userdata;
+    ssize_t nbuf = strtol(str + strlen(BUFFER_PREFIX), NULL, 10);
+    printf("buffer:%ld\n", nbuf);
 
 }
 
