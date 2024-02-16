@@ -5,7 +5,7 @@
         { n: 1, bufa:<CxVarBuf>, bufb:<CxVarBuf>}
 
         Is encoded as JSON as:
-        { n: 1, bufa:"WrsBuf:0", bufb:"WrsBuf:1"}
+        { n: 1, bufa:"BUFFER0", bufb:"BUFFER1"}
 
         Binary message sent is:
         - JSON chunk
@@ -19,7 +19,7 @@
         { n: 1, bufa:<typed array>, bufb:<typed array>}
 
         Is encoded by browser as JSON as:
-        { n: 1, bufa: "WrsBuf:0", bufb: "WrsBuf:"}
+        { n: 1, bufa: "BUFFER0", bufb: "BUFFER1"}
 
         Binary message sent is:
         - JSON chunk
@@ -91,7 +91,6 @@ typedef struct WrsEncoder {
     const CxAllocator* alloc;
     cxarr_u8    encoded;    // Buffer with encoded message chunks
     cxarr_buf   buffers;    // Array of buffers to encode
-    //cxarr_var   vars;       // Replaced vars
 } WrsEncoder;
 
 
@@ -112,7 +111,6 @@ WrsEncoder* wrs_encoder_new(const CxAllocator* alloc) {
     e->alloc = alloc;
     e->encoded = cxarr_u8_init(alloc); 
     e->buffers = cxarr_buf_init(alloc);
-    //e->vars = cxarr_var_init(alloc);
     return e;
 }
 
@@ -120,7 +118,6 @@ void wrs_encoder_del(WrsEncoder* e) {
 
     cxarr_u8_free(&e->encoded);
     cxarr_buf_free(&e->buffers);
-    //cxarr_var_free(&e->vars);
     cx_alloc_free(e->alloc, e, sizeof(WrsEncoder));
 }
 
@@ -128,7 +125,6 @@ void wrs_encoder_clear(WrsEncoder* e) {
 
     cxarr_u8_clear(&e->encoded);
     cxarr_buf_clear(&e->buffers);
-    //cxarr_var_clear(&e->vars);
 }
 
 int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
@@ -167,7 +163,7 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
         add_padding(e, CHUNK_ALIGNMENT);
     }
 
-    // Free buffers
+    // Free binary buffers
     for (size_t i = 0; i < cxarr_buf_len(&e->buffers); i++) {
         BufInfo* buf = &e->buffers.data[i];
         cx_alloc_free(e->alloc, buf->data, buf->len);
