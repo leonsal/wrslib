@@ -103,6 +103,7 @@ static int enc_writer(void* ctx, const void* data, size_t len);
 static CxVar* enc_json_replacer(CxVar* val, void* userdata);
 static uintptr_t align_forward(uintptr_t ptr, size_t align);
 static void add_padding(WrsEncoder*e, size_t align);
+static void dec_json_replacer(CxVar** val, void* userdata);
 
 #include "rpc_codec.h"
 
@@ -224,9 +225,16 @@ void wrs_decoder_clear(WrsDecoder* e) {
 
 int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg) {
 
+    // Sets the configuration for JSON parser
+    CxJsonParseCfg cfg = {
+        .alloc = d->alloc,
+        .replacer_fn = dec_json_replacer,
+        .replacer_data = d,
+    };
+
     // Text messages only contains a JSON string
     if (text) {
-        return cx_json_parse(data, len, msg, d->alloc);
+        return cx_json_parse(data, len, msg, &cfg);
     }
 
     // Decode the message chunks in any order
@@ -257,7 +265,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
             if (json) {
                 return 1;
             }
-            int res =cx_json_parse(p, chunk_len, msg, d->alloc);
+            int res =cx_json_parse(p, chunk_len, msg, &cfg);
             if (res) {
                 return res;
             }
@@ -342,6 +350,20 @@ static void add_padding(WrsEncoder*e, size_t align) {
     const size_t npaddings = new_len - buf_len;
     static char* padbytes[8] = {0};
     cxarr_u8_pushn(&e->encoded, (char*)padbytes, npaddings);
+}
+
+static void dec_json_replacer(CxVar** var, void* userdata) {
+
+    // if (cx_var_get_type(*var) != CxVarStr) {
+    //     return;
+    // }
+    // const char* str;
+    // cx_var_get_str(*var, &str);
+    // if (strncmp(str, BUFFER_PREFIX, strlen(BUFFER_PREFIX)) != 0) {
+    //     return;
+    // }
+    //
+
 }
 
 
