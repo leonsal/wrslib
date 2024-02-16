@@ -115,7 +115,9 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     map_rpc_set(&wrs->rpc_handlers, url_key, handler);
 
     // Register the websocket callback functions.
-    mg_set_websocket_handler_with_subprotocols(wrs->ctx, url, &wsprot,
+    // mg_set_websocket_handler_with_subprotocols(wrs->ctx, url, &wsprot,
+    //     wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
+    mg_set_websocket_handler(wrs->ctx, url,
         wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
 
 exit:
@@ -361,6 +363,8 @@ static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data) {
 // The message could be a remote call from the client or a response to a previous call from the server.
 // The handler should return 1 to keep the WebSocket connection open or 0 to close it.
 static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t dataSize, void *user_data) {
+
+    WRS_LOGD("%s: data size:%zu", __func__, dataSize);
 
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);

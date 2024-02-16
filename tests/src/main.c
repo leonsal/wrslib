@@ -35,11 +35,11 @@ static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
-static void call_test_bin(WrsRpc* rpc, size_t connid, size_t size);
+static void call_test_bin(WrsRpc* rpc, size_t count, size_t size);
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
 
 #define CHKT(COND) \
-    { if (!COND) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
+    { if (!(COND)) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
 #define CHKF(COND) \
     { if (COND) {fprintf(stderr, "CHK ERROR in %s() at %s:%d\n", __func__, __FILE__, __LINE__); abort();}}
 
@@ -218,50 +218,92 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
 static int cmd_test_bin(Cli* cli, void* udata) {
 
    AppState* app = udata;
-   call_test_bin(app->rpc1, 0, 10);
+   ssize_t count = 1;
+   ssize_t size  = 10;
+   if (cli_argc(cli) > 1) {
+       count = strtol(cli_argv(cli, 1), NULL, 10);
+   }
+   if (cli_argc(cli) > 2) {
+       size = strtol(cli_argv(cli, 2), NULL, 10);
+   }
+
+   call_test_bin(app->rpc1, count, size);
    return CliOk;
 }
 
-static void call_test_bin(WrsRpc* rpc, size_t connid, size_t size) {
+static void call_test_bin(WrsRpc* rpc, size_t count, size_t size) {
 
-    // Create parameters with non-initialized buffers
-    CxVar* params = cx_var_new(cxDefaultAllocator());
-    cx_var_set_map(params);
-    cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
-    cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
-    cx_var_set_map_buf(params, "f64", NULL, size * sizeof(double));
+    for (size_t i = 0; i < count; i++) {
+        // Create parameters with non-initialized buffers
+        CxVar* params = cx_var_new(cxDefaultAllocator());
+        cx_var_set_map(params);
+        cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
+        cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
+        cx_var_set_map_buf(params, "f64", NULL, size * sizeof(double));
 
-    // Get buffers and initialize them
-    size_t len;
-    uint32_t* arru32;
-    cx_var_get_map_buf(params, "u32", (void*)&arru32, &len);
-    for (size_t i = 0; i < size; i++) {
-         arru32[i] = i;
-    }
-    float* arrf32;
-    cx_var_get_map_buf(params, "f32", (void*)&arrf32, &len);
-    for (size_t i = 0; i < size; i++) {
-         arrf32[i] = i*2;
-    }
-    double* arrf64;
-    cx_var_get_map_buf(params, "f64", (void*)&arrf64, &len);
-    for (size_t i = 0; i < size; i++) {
-         arrf64[i] = i*2;
-    }
+        // Get buffers and initialize them
+        size_t len;
+        uint32_t* arru32;
+        cx_var_get_map_buf(params, "u32", (void*)&arru32, &len);
+        for (size_t i = 0; i < size; i++) {
+             arru32[i] = i;
+        }
+        float* arrf32;
+        cx_var_get_map_buf(params, "f32", (void*)&arrf32, &len);
+        for (size_t i = 0; i < size; i++) {
+             arrf32[i] = i*2;
+        }
+        double* arrf64;
+        cx_var_get_map_buf(params, "f64", (void*)&arrf64, &len);
+        for (size_t i = 0; i < size; i++) {
+             arrf64[i] = i*3;
+        }
 
-    wrs_rpc_call(rpc, connid, "test_bin", params, resp_test_bin);
-    cx_var_del(params);
+        int res = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
+        if (res) {
+            WRS_LOGE("%s: error from wrs_rpc_call()", __func__);
+            return;
+        }
+        WRS_LOGD("%s: called test_bin", __func__);
+        cx_var_del(params);
+    }
 }
 
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
 
-    WRS_LOGD("response");
+    WRS_LOGD("%s: response test_bin", __func__);
     CxVar* data = cx_var_get_map_val(resp, "data");
     CHKT(data);
 
     const uint32_t* u32;
     size_t u32_len;
     CHKT(cx_var_get_map_buf(data, "u32", (const void**)&u32, &u32_len));
+    for (size_t i = 0; i < u32_len/sizeof(uint32_t); i++) {
+         if (u32[i] != (i+1)) {
+            WRS_LOGE("%s: u32 response error", __func__);
+            break;
+         }
+    }
+
+    const float* f32;
+    size_t f32_len;
+    CHKT(cx_var_get_map_buf(data, "f32", (const void**)&f32, &f32_len));
+    for (size_t i = 0; i < f32_len/sizeof(float); i++) {
+         if (f32[i] != (i*2+1)) {
+            WRS_LOGE("%s: f32 response error", __func__);
+            break;
+         }
+    }
+
+    const double* f64;
+    size_t f64_len;
+    CHKT(cx_var_get_map_buf(data, "f64", (const void**)&f64, &f64_len));
+    for (size_t i = 0; i < f64_len/sizeof(double); i++) {
+         if (f64[i] != (i*3+1)) {
+            WRS_LOGE("%s: f64 response error", __func__);
+            break;
+         }
+    }
     
     return 0;
 }

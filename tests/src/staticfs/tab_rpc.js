@@ -75,16 +75,15 @@ rpc.bind("test_bin", function(params) {
 
     const f32 = new Float32Array(params.f32);
     for (let i = 0; i < f32.length; i++) {
-        f32[i] += 2;
+        f32[i] += 1;
     }
 
     const f64 = new Float64Array(params.f64);
     for (let i = 0; i < f64.length; i++) {
-        f64[i] += 3;
+        f64[i] += 1;
     }
 
-    //return {data: {u32, f32, f64}};
-    return {data: {u32}};
+    return {data: {u32, f32, f64}};
 });
 
 rpc.bind("client_callback", function(params) {

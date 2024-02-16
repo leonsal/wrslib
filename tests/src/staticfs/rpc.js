@@ -49,6 +49,9 @@ function alignOffset(offset) {
 // Returns if buffer is TypedArray or ArrayBuffer.
 function checkBuffer(buffer) {
 
+    if (buffer === null || buffer === undefined) {
+        return false;
+    }
     if (typeof(buffer) != 'object') {
         return false;
     }
@@ -104,102 +107,12 @@ export class RPC extends EventTarget {
         }
 
         // Builds RPC call message
-        const req = {
+        const msg = {
             cid:    this.#cid,
             call:   remoteName,
             params: params,
         };
-        const json = JSON.stringify(req);
-        this.#socket.send(json);
-        this.#callTime = performance.now();
-
-        // If callback not defined
-        if (!cb) {
-            return;
-        }
-
-        // Saves callback associated with message id
-        // TODO timeout for responses ??
-        this.#callbacks.set(this.#cid, cb);
-        this.#cid += 1;
-    }
-
-    // Call remote function
-    call_bin(remoteName, params=null, buffers, cb=null) {
-
-        // Checks connection is open
-        if (!this.#socket || this.#socket.readyState != WebSocket.OPEN) {
-            return "RPC connection not opened";
-        }
-
-        // Check buffers
-        if (!buffers || !Array.isArray(buffers)) {
-            throw "Buffers must be an array of typed arrays or array buffer";
-        }
-        for (let i = 0; i < buffers.length; i++) {
-            if (!checkBuffer(buffers[i])) {
-                throw `Buffers:${i} must be a typed array or array buffer`;
-            }
-        }
-
-        // Builds RPC call message
-        const req = {
-            cid:    this.#cid,
-            call:   remoteName,
-            params: params,
-        };
-        const json = JSON.stringify(req);
-
-        // Converts JSON string to typed array
-        const encoder = new TextEncoder();
-        const json_bytes = encoder.encode(json);
-
-        // Calculates the total length in bytes of the data to send
-        const chunkHeaderSize = 8;
-        let totalByteLength = chunkHeaderSize + json_bytes.byteLength;
-        totalByteLength = alignOffset(totalByteLength);
-        for (let i = 0; i < buffers.length; i++) {
-            totalByteLength += chunkHeaderSize + buffers[i].byteLength;
-            totalByteLength = alignOffset(totalByteLength);
-        }
-        console.log("totalByteLength", totalByteLength);
-
-        // Allocates message buffer with total size required
-        const msgBuffer = new ArrayBuffer(totalByteLength);
-        const msgView = new DataView(msgBuffer);
-        const msgU8 = new Uint8Array(msgBuffer);
-
-        // JSON header
-        let byteOffset = 0;
-        msgView.setUint32(byteOffset, ChunkTypeMsg, true);
-        byteOffset += 4;
-        msgView.setUint32(byteOffset, json_bytes.byteLength, true);
-        byteOffset += 4;
-
-        // JSON data
-        msgU8.set(json_bytes, byteOffset);
-        byteOffset += json_bytes.byteLength;
-        byteOffset = alignOffset(byteOffset);
-        console.log("offset", byteOffset);
-        
-        // Buffers
-        for (let i = 0; i < buffers.length; i++) {
-            const buffer = buffers[i];
-            const bufU8 = new Uint8Array(buffer.buffer);
-            // Buffer header
-            msgView.setUint32(byteOffset, ChunkTypeBuffer, true);
-            byteOffset += 4;
-            msgView.setUint32(byteOffset, buffer.byteLength, true);
-            byteOffset += 4;
-            // Buffer data
-            msgU8.set(bufU8, byteOffset);
-            byteOffset += buffer.byteLength;
-            byteOffset = alignOffset(byteOffset);
-        }
-
-        //console.log(msgBuffer);
-        this.#socket.send(msgBuffer);
-        this.#callTime = performance.now();
+        this.#sendMsg(msg);
 
         // If callback not defined
         if (!cb) {
@@ -277,14 +190,13 @@ export class RPC extends EventTarget {
             }
             buffers.push(value);
             const replaced = BufferPrefix + (buffers.length-1).toString();
-            console.log("replaced", replaced, typeof(replaced));
             return replaced;
         });
-        console.log("stringify", json);
 
         // If no buffers found in the message, send as a simple text message.
         if (buffers.length == 0) {
             this.#socket.send(json);
+            this.#callTime = performance.now();
             return;
         }
 
@@ -317,7 +229,6 @@ export class RPC extends EventTarget {
         msgU8.set(json_bytes, offset);
         offset += json_bytes.byteLength;
         offset = alignOffset(offset);
-        console.log("offset", offset);
         
         // Buffers
         for (let i = 0; i < buffers.length; i++) {
@@ -334,6 +245,7 @@ export class RPC extends EventTarget {
             offset = alignOffset(offset);
         }
         this.#socket.send(msgBuffer);
+        this.#callTime = performance.now();
     }
 
     #onMessage(ev) {
@@ -365,11 +277,9 @@ export class RPC extends EventTarget {
                     console.log("reviver: invalid buffer number:", bufn);
                     return undefined;
                 }
-                console.log("reviver: ", bufn, buffers[bufn]);
                 return buffers[bufn];
             });
         }
-        console.log("msg", msg);
 
         // Checks for response id from previous call
         if (msg.rid !== undefined) {
@@ -391,6 +301,7 @@ export class RPC extends EventTarget {
                 return;
             }
             this.#callElapsed = performance.now() - this.#callTime;
+            console.log("elapsed", this.#callElapsed);
             cb(msg.resp);
             return;
         }

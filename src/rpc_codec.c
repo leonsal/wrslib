@@ -385,7 +385,7 @@ static void dec_json_replacer(CxVar* var, void* userdata) {
 
     WrsDecoder* d = userdata;
     ssize_t nbuf = strtol(str + strlen(BUFFER_PREFIX), NULL, 10);
-    printf("buffer:%ld\n", nbuf);
+    //printf("buffer:%ld\n", nbuf);
     cxarr_var_push(&d->vars, var);
 }
 
