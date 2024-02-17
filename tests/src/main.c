@@ -188,20 +188,71 @@ static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar*
     // Get message parameters
     int64_t size;
     CHKT(cx_var_get_map_int(params, "size", &size));
-    CxVar* arr_in = cx_var_get_map_arr(params, "arr");
-    size_t arr_in_len;
-    CHKT(cx_var_get_arr_len(arr_in, &arr_in_len));
-    CHKT(arr_in_len == size);
 
+    CxVar* u8 = cx_var_get_map_arr(params, "u8");
+    size_t u8len;
+    CHKT(cx_var_get_arr_len(u8, &u8len));
+    CHKT(u8len == size);
+
+    CxVar* u16 = cx_var_get_map_arr(params, "u16");
+    size_t u16len;
+    CHKT(cx_var_get_arr_len(u16, &u16len));
+    CHKT(u16len == size);
+
+    CxVar* u32 = cx_var_get_map_arr(params, "u32");
+    size_t u32len;
+    CHKT(cx_var_get_arr_len(u32, &u32len));
+    CHKT(u32len == size);
+
+    CxVar* f32 = cx_var_get_map_arr(params, "f32");
+    size_t f32len;
+    CHKT(cx_var_get_arr_len(f32, &f32len));
+    CHKT(f32len == size);
+
+    CxVar* f64 = cx_var_get_map_arr(params, "f64");
+    size_t f64len;
+    CHKT(cx_var_get_arr_len(f64, &f64len));
+    CHKT(f64len == size);
+
+    //
     // Creates response 'data'
+    //
     CxVar* map = cx_var_set_map_map(resp, "data");
     cx_var_set_map_int(map, "size", size);
-    // Array with input elements incremented
-    CxVar* arr_out = cx_var_set_map_arr(map, "arr");
+
+    CxVar* u8out = cx_var_set_map_arr(map, "u8");
     for (size_t i = 0; i < size; i++) {
         int64_t el;
-        cx_var_get_arr_int(arr_in, i, &el);
-        cx_var_push_arr_int(arr_out, el+1);
+        cx_var_get_arr_int(u8, i, &el);
+        cx_var_push_arr_int(u8out, el+1);
+    }
+
+    CxVar* u16out = cx_var_set_map_arr(map, "u16");
+    for (size_t i = 0; i < size; i++) {
+        int64_t el;
+        cx_var_get_arr_int(u16, i, &el);
+        cx_var_push_arr_int(u16out, el+1);
+    }
+
+    CxVar* u32out = cx_var_set_map_arr(map, "u32");
+    for (size_t i = 0; i < size; i++) {
+        int64_t el;
+        cx_var_get_arr_int(u32, i, &el);
+        cx_var_push_arr_int(u32out, el+1);
+    }
+
+    CxVar* f32out = cx_var_set_map_arr(map, "f32");
+    for (size_t i = 0; i < size; i++) {
+        int64_t el;
+        cx_var_get_arr_int(f32, i, &el);
+        cx_var_push_arr_int(f32out, el+1);
+    }
+
+    CxVar* f64out = cx_var_set_map_arr(map, "f64");
+    for (size_t i = 0; i < size; i++) {
+        int64_t el;
+        cx_var_get_arr_int(f64, i, &el);
+        cx_var_push_arr_int(f64out, el+1);
     }
     return 0;
 }
@@ -217,27 +268,22 @@ static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
     uint8_t* u8;
     size_t u8len;
     CHKT(cx_var_get_map_buf(params, "u8", (void*)&u8, &u8len));
-    WRS_LOGD("%s: u8_len:%zu", __func__, u8len);
 
     uint16_t* u16;
     size_t u16len;
     CHKT(cx_var_get_map_buf(params, "u16", (void*)&u16, &u16len));
-    WRS_LOGD("%s: u16_len:%zu", __func__, u16len);
 
     uint32_t* u32;
     size_t u32len;
     CHKT(cx_var_get_map_buf(params, "u32", (void*)&u32, &u32len));
-    WRS_LOGD("%s: u32_len:%zu", __func__, u32len);
 
     float* f32;
     size_t f32len;
     CHKT(cx_var_get_map_buf(params, "f32", (void*)&f32, &f32len));
-    WRS_LOGD("%s: f32_len:%zu", __func__, f32len);
 
     double* f64;
     size_t f64len;
     CHKT(cx_var_get_map_buf(params, "f64", (void*)&f64, &f64len));
-    WRS_LOGD("%s: f64_len:%zu", __func__, f64len);
 
     //
     // Creates response 'data'

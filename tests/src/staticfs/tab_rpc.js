@@ -45,9 +45,25 @@ function callTextMsg(count, size, async) {
     const call_remote = function() {
         // Build call parameters
         const params = {size};
-        params.arr = [];
+        params.u8 = [];
         for (let i = 0; i < size; i++) {
-            params.arr.push(getRandomInt(1000));
+            params.u8.push(getRandomInt(200));
+        }
+        params.u16 = [];
+        for (let i = 0; i < size; i++) {
+            params.u16.push(getRandomInt(1000));
+        }
+        params.u32 = [];
+        for (let i = 0; i < size; i++) {
+            params.u32.push(getRandomInt(1000));
+        }
+        params.f32 = [];
+        for (let i = 0; i < size; i++) {
+            params.f32.push(getRandomInt(1000));
+        }
+        params.f64 = [];
+        for (let i = 0; i < size; i++) {
+            params.f64.push(getRandomInt(1_000_000));
         }
         // Call remote
         const emsg = rpc.call("rpc_server_text_msg", params, response);
@@ -71,8 +87,28 @@ function callTextMsg(count, size, async) {
         }
         const params = sentParams.shift();
         for (let i = 0 ; i < size; i++) {
-            if (resp.data.arr[i] != params.arr[i]+1) {
-                logEvent(`ERROR: invalid response array`);
+            if (resp.data.u8[i] != params.u8[i]+1) {
+                logEvent(`ERROR: invalid response u8 array`);
+            }
+        }
+        for (let i = 0 ; i < size; i++) {
+            if (resp.data.u16[i] != params.u16[i]+1) {
+                logEvent(`ERROR: invalid response u16 array`);
+            }
+        }
+        for (let i = 0 ; i < size; i++) {
+            if (resp.data.u32[i] != params.u32[i]+1) {
+                logEvent(`ERROR: invalid response u32 array`);
+            }
+        }
+        for (let i = 0 ; i < size; i++) {
+            if (resp.data.f32[i] != params.f32[i]+1) {
+                logEvent(`ERROR: invalid response f32 array`);
+            }
+        }
+        for (let i = 0 ; i < size; i++) {
+            if (resp.data.f64[i] != params.f64[i]+1) {
+                logEvent(`ERROR: invalid response f64 array`);
             }
         }
 
