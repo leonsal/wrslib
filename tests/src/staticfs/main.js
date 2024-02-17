@@ -49,6 +49,7 @@ const mainMenu = {
             // Get the view id and the create view function
             // If tab already open, just sets its active.
             const {viewId, view} = viewfn();
+            console.log("VIEW------------------->", viewId, view);
             if (App.isTabViewActive(viewId)) {
                 $$("main.tabview").setValue(viewId);
                 return;

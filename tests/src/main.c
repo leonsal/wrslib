@@ -33,8 +33,7 @@ static CliCmd cmds[];
 static int parse_options(int argc, const char* argv[], AppState* apps);
 static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
-static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
-static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t size);
@@ -80,9 +79,8 @@ int main(int argc, const char* argv[]) {
     app.wrs = wrs_create(&cfg);
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc1, &app);
-    CHKF(wrs_rpc_bind(app.rpc1, "get_time", rpc_get_time));
-    CHKF(wrs_rpc_bind(app.rpc1, "get_lines", rpc_get_lines));
-    CHKF(wrs_rpc_bind(app.rpc1, "sum_bin_arrays", rpc_sum_bin_arrays));
+    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
+    //CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
 
     // Blocks processing commands
     command_line_loop(&app);
@@ -185,36 +183,26 @@ static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev) {
     WRS_LOGD("%s: handler:%s connid:%zu event:%s", __func__, info.url, connid, evname);
 }
 
-static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
-    cx_var_set_map_int(resp, "data", 42);
-    return 0;
-}
+    // Get message parameters
+    int64_t size;
+    CHKT(cx_var_get_map_int(params, "size", &size));
+    CxVar* arr_in = cx_var_get_map_arr(params, "arr");
+    size_t arr_in_len;
+    CHKT(cx_var_get_arr_len(arr_in, &arr_in_len));
+    CHKT(arr_in_len == size);
 
-static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
-
-    // Get request parameters
-    int64_t count;
-    int64_t len;
-    CHKT(cx_var_get_map_int(params, "count", &count));
-    CHKT(cx_var_get_map_int(params, "len", &len));
-
-    // Creates response 'data' as an array:
-    CxVar* arr = cx_var_set_map_arr(resp, "data");
-
-    // Creates and pushes string lines into the array
-    char* line = malloc(len);
-    for (size_t l = 0; l < count; l++) {
-        int code = '!';
-        for (size_t c = 0; c < len; c++) {
-            line[c] = code++;
-            if (code >= '~') {
-                code = '!';
-            }
-        }
-       CHKT(cx_var_push_arr_strn(arr, line, len));
+    // Creates response 'data'
+    CxVar* map = cx_var_set_map_map(resp, "data");
+    cx_var_set_map_int(map, "size", size);
+    // Array with input elements incremented
+    CxVar* arr_out = cx_var_set_map_arr(map, "arr");
+    for (size_t i = 0; i < size; i++) {
+        int64_t el;
+        cx_var_get_arr_int(arr_in, i, &el);
+        cx_var_push_arr_int(arr_out, el+1);
     }
-    free(line);
     return 0;
 }
 

@@ -2,24 +2,20 @@ import * as App from "./app.js";
 import {RPC} from "./rpc.js";
 
 const VIEW_ID = "tab.rpc";
-
-// Set the menu option ids
-const optionClear       = "rpc.clear";
-const optionOpen        = "rpc.open";
-const optionClose       = "rpc.close";
-const optionGetTime     = "rpc.get_time";
-const optionGetLines1   = "rpc.get_lines1";
-const optionGetLines2   = "rpc.get_lines2";
-const optionGetLines3   = "rpc.get_lines3";
-const optionCallClient  = "rpc.call_client";
-const optionSumBinArrays = "rpc.sum_bin_array";
-
-// Builds map of menu option id to function handler
-const optionMap = new Map();
+const COMBO_COUNT_ID = "tab.rpc.combo.count";
+const COMBO_SIZE_ID = "tab.rpc.combo.size";
+const TEXT_COUNT_ID = "tab.rpc.text.count";
+const TEXT_SIZE_ID = "tab.rpc.text.size";
+const CHECK_ASYNC = "tab.rpc.check.async";
 
 // Creates RPC manager
 const RPC_URL = "/rpc1";
 const rpc = new RPC(RPC_URL);
+
+function getRandomInt(max) {
+
+  return Math.floor(Math.random() * max);
+}
 
 function logEvent(msg) {
 
@@ -42,29 +38,65 @@ function logRPC(ev) {
     }
 }
 
-function getLines(count, len) {
 
-    const emsg = rpc.call("get_lines", {count, len}, (resp)=> {
-        if (resp.err) {
-            logEvent(`ERROR: ${resp.err}`);
+function callTextMsg(count, size, async) {
+
+    // Build call parameters
+    const params = {size};
+    params.arr = [];
+    for (let i = 0; i < size; i++) {
+        params.arr.push(getRandomInt(1000));
+    }
+
+    const time_start = performance.now();
+    let resp_count = 0;
+
+    const response = function(resp) {
+        // Checks response
+        const resp_size = resp.data.size;
+        if (resp_size != size) {
+            logEvent(`ERROR: invalid response size`);
             return;
         }
-        const elapsed = rpc.lastCallElapsed();
-        const lines = resp.data;
-        let lineCount = 0;
-        let colLen = 0;
-        for (let i = 0; i < lines.length; i++) {
-             lineCount++;
-             colLen += lines[i].length
+        for (let i = 0 ; i < size; i++) {
+            if (resp.data.arr[i] != params.arr[i]+1) {
+                logEvent(`ERROR: invalid response array`);
+            }
         }
-        logEvent(`lines: ${lineCount}, len: ${colLen/lineCount}  elapsed: ${elapsed.toFixed(3)}ms`);
-    });
-    if (emsg) {
-        logEvent(`ERROR: ${emsg}`);
+
+        resp_count++;
+        if (resp_count == count) {
+            const elapsed = (performance.now() - time_start).toFixed(2);
+            logEvent(`Received: ${resp_count} responses in ${elapsed}`);
+            return;
+        }
+
+        if (!async) {
+            if (call_remote()) {
+                return;
+            }
+        }
+    };
+
+    const call_remote = function() {
+        const emsg = rpc.call("rpc_server_text_msg", params, response);
+        if (emsg) {
+            logEvent(`ERROR: ${emsg}`);
+        }
+    }
+
+    if (async) {
+        for (let c = 0; c < count; c++) {
+            if (call_remote()) {
+                return;
+            }
+        }
+    } else {
+        call_remote();
     }
 }
 
-function sumBinArrays(len) {
+function callBinaryMsg(count, len) {
 
     const u8 = new Uint8Array(len);
     for (let i  = 0; i < u8.length; i++) {
@@ -126,67 +158,67 @@ rpc.bind("client_callback", function(params) {
     return {data: 'client_callback_response'};
 });
 
-optionMap.set(optionClear, function() {
-    $$('list.wsocket').clearAll();
-});
-
-optionMap.set(optionOpen, function() {
-    const emsg = rpc.open();
-    if (emsg) {
-        logEvent(emsg);
-        return;
-    }
-    rpc.addEventListener(RPC.EV_OPENED, logRPC);
-    rpc.addEventListener(RPC.EV_CLOSED, logRPC);
-    rpc.addEventListener(RPC.EV_ERROR, logRPC);
-});
-
-optionMap.set(optionClose, function() {
-    const emsg = rpc.close();
-    if (emsg) {
-        logEvent(emsg);
-        return;
-    }
-});
-
-optionMap.set(optionGetTime, function() {
-
-    const emsg = rpc.call("get_time", null, (resp)=> {
-        if (resp.err) {
-            logEvent("ERROR", resp.err);
-            return;
-        }
-        const elapsed = rpc.lastCallElapsed();
-        logEvent(`${resp.data}  elapsed:${elapsed.toFixed(3)}ms`);
-    });
-    if (emsg) {
-        logEvent(`ERROR: ${emsg}`);
-        return;
-    }
-});
-
-optionMap.set(optionGetLines1, () => getLines(1, 1024));
-optionMap.set(optionGetLines2, () => getLines(100, 1024));
-optionMap.set(optionGetLines3, () => getLines(10000, 1024));
-
-optionMap.set(optionCallClient, () => {
-
-    const emsg = rpc.call("call_client", {name: 'client_callback', value: 42}, (resp)=> {
-        if (resp.err) {
-            logEvent(`ERROR: ${emsg}`);
-            return;
-        }
-        logEvent(`call_client resp: ${resp.data}`);
-    });
-    if (emsg) {
-        logEvent(`ERROR: ${emsg}`);
-    }
-});
-
-optionMap.set(optionSumBinArrays, () => {
-
-    sumBinArrays(1_000_000);
-});
+// optionMap.set(optionClear, function() {
+//     $$('list.wsocket').clearAll();
+// });
+//
+// optionMap.set(optionOpen, function() {
+//     const emsg = rpc.open();
+//     if (emsg) {
+//         logEvent(emsg);
+//         return;
+//     }
+//     rpc.addEventListener(RPC.EV_OPENED, logRPC);
+//     rpc.addEventListener(RPC.EV_CLOSED, logRPC);
+//     rpc.addEventListener(RPC.EV_ERROR, logRPC);
+// });
+//
+// optionMap.set(optionClose, function() {
+//     const emsg = rpc.close();
+//     if (emsg) {
+//         logEvent(emsg);
+//         return;
+//     }
+// });
+//
+// optionMap.set(optionGetTime, function() {
+//
+//     const emsg = rpc.call("get_time", null, (resp)=> {
+//         if (resp.err) {
+//             logEvent("ERROR", resp.err);
+//             return;
+//         }
+//         const elapsed = rpc.lastCallElapsed();
+//         logEvent(`${resp.data}  elapsed:${elapsed.toFixed(3)}ms`);
+//     });
+//     if (emsg) {
+//         logEvent(`ERROR: ${emsg}`);
+//         return;
+//     }
+// });
+//
+// optionMap.set(optionGetLines1, () => getLines(1, 1024));
+// optionMap.set(optionGetLines2, () => getLines(100, 1024));
+// optionMap.set(optionGetLines3, () => getLines(10000, 1024));
+//
+// optionMap.set(optionCallClient, () => {
+//
+//     const emsg = rpc.call("call_client", {name: 'client_callback', value: 42}, (resp)=> {
+//         if (resp.err) {
+//             logEvent(`ERROR: ${emsg}`);
+//             return;
+//         }
+//         logEvent(`call_client resp: ${resp.data}`);
+//     });
+//     if (emsg) {
+//         logEvent(`ERROR: ${emsg}`);
+//     }
+// });
+//
+// optionMap.set(optionSumBinArrays, () => {
+//
+//     sumBinArrays(1_000_000);
+// });
 
 // Returns this tab view
 export function getView() {
@@ -201,39 +233,105 @@ export function getView() {
                     App.setTabViewActive(VIEW_ID, false);
                 }
             },
-            cols: [
-                // Siderbar menu
+            rows: [
                 {
-                    view: "sidebar",
-                    id: "rpc.sidebar",
-                    data: [
-                        { id: optionOpen,  value: "Open RPC connection", icon:"open"},
-                        { id: optionClose, value: "Close RPC connection", icon:"close"},
-                        { id: optionClear, value: "Clear log", icon:"clear"},
-                        { value: "JSON", icon:"json",
-                            data: [
-                                { id: optionGetTime,   value: "get_time()"},
-                                { id: optionGetLines1, value: "get_lines(1x1024)"},
-                                { id: optionGetLines2, value: "get_lines(100x1024)"},
-                                { id: optionGetLines3, value: "get_lines(10.000x1024)"},
-                                { id: optionCallClient, value: "call_client()"},
-                            ],
-                        },
-                        { value: "Binary", icon:"binary",
-                            data: [
-                                { id: optionSumBinArrays, value: "sum_bin_arrays(1)"},
-                            ],
-                        }
-                    ],
-                    on: {
-                        onItemClick: function(id) {
-                            //console.log(id);
-                            const handler = optionMap.get(id);
-                            if (handler) {
-                                handler();
+                    view: "toolbar",
+                    cols: [
+                        {
+                            view:   "button",
+                            label:  "Open",
+                            css:    "webix_primary",
+                            autowidth:  true,
+                            click: function() {
+                                const emsg = rpc.open();
+                                if (emsg) {
+                                    logEvent(emsg);
+                                    return;
+                                }
+                                rpc.addEventListener(RPC.EV_OPENED, logRPC);
+                                rpc.addEventListener(RPC.EV_CLOSED, logRPC);
+                                rpc.addEventListener(RPC.EV_ERROR, logRPC);
                             }
-                        }
-                    }
+                        },
+                        {
+                            view:   "button",
+                            label:  "Close",
+                            css:    "webix_primary",
+                            autowidth:  true,
+                            click: function() {
+                                const emsg = rpc.close();
+                                if (emsg) {
+                                    logEvent(emsg);
+                                    return;
+                                }
+                            }
+                        },
+                        {
+                            view:   "button",
+                            label:  "Clear log",
+                            css:    "webix_alert",
+                            autowidth:  true,
+                            click: function() {
+                                $$('list.wsocket').clearAll();
+                            }
+                        },
+                        { width: 20},
+                        {
+                            view:   "button",
+                            label:  "Call Text",
+                            css:    "webix_danger",
+                            autowidth:  true,
+                            click: function() {
+                                const count = parseInt($$(TEXT_COUNT_ID).getValue());
+                                const size = parseInt($$(TEXT_SIZE_ID).getValue());
+                                const async = $$(CHECK_ASYNC).getValue();
+                                if (count == NaN || size == NaN) { return;}
+                                console.log("count", count, "size", size, "async", async);
+                                callTextMsg(count, size, async);
+                            }
+                        },
+                        { width: 20},
+                        {
+                            view:   "button",
+                            label:  "Call Binary",
+                            css:    "webix_danger",
+                            autowidth:  true,
+                            click: function() {
+                                const count = parseInt($$(TEXT_COUNT_ID).getValue());
+                                const size = parseInt($$(TEXT_SIZE_ID).getValue());
+                                const async = $$(CHECK_ASYNC).getValue();
+                                if (count == NaN || size == NaN) { return;}
+                                console.log("count", count, "size", size, "async", async);
+                            }
+                        },
+                        {
+                            view:   "text",
+                            id: TEXT_COUNT_ID,
+                            label: "Message count:",
+                            labelAlign: "right",
+                            labelWidth: 120,
+                            placeholder: "count",
+                            value: "1",
+                            width: 200,
+                        },
+                        {
+                            view:   "text",
+                            id: TEXT_SIZE_ID,
+                            label: "Array size:",
+                            labelAlign: "right",
+                            placeholder: "size",
+                            value: "1",
+                            width: 200,
+                        },
+                        {
+                            view:   "checkbox",
+                            id: CHECK_ASYNC,
+                            labelAlign: "right",
+                            label: "Async:",
+                            value: 0,
+                            width: 200,
+                        },
+                    ],
                 },
                 // List with events
                 {
