@@ -137,7 +137,9 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
     ChunkHeader header = {.type = WrsChunkMsg };
     cxarr_u8_pushn(&e->encoded, (uint8_t*)&header, sizeof(ChunkHeader));
 
-    // Encodes JSON
+    // Encodes JSON using a replacer which replaces CxVarBuf objects
+    // by a special string prefix plus the buffer number.
+    // The replacer also builds the array of buffers found.
     CxJsonBuildCfg cfg = { .replacer_fn = enc_json_replacer, .replacer_data = e };
     CxWriter writer = {.ctx = e, .write = (CxWriterWrite)enc_writer};
     int res = cx_json_build(msg, &cfg, &writer); 
