@@ -183,11 +183,13 @@ void* wrs_encoder_get_msg(WrsEncoder* e, bool* text, size_t* len) {
         return NULL;
     }
 
-    // Checks for text message (no binary buffers present)
+    // If no binary buffers present, this is a text message.
+    // Get its length from the chunk header.
     if (cxarr_buf_len(&e->buffers) == 0) {
         *text = true;
-        *len = buf_size - sizeof(ChunkHeader);
+        *len = *(uint32_t*)(&e->encoded.data[4]);
         return e->encoded.data + sizeof(ChunkHeader);
+    // This is a binary message, returns the buffer encoded buffer.
     } else {
         *text = false;
         *len = buf_size;
@@ -308,6 +310,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
 
     return 0;
 }
+
 
 //-----------------------------------------------------------------------------
 // Local functions

@@ -301,7 +301,6 @@ export class RPC extends EventTarget {
                 return;
             }
             this.#callElapsed = performance.now() - this.#callTime;
-            console.log("elapsed", this.#callElapsed);
             cb(msg.resp);
             return;
         }
