@@ -20,6 +20,7 @@ typedef struct AppState {
     int             server_port;        // HTTP server listening port
     bool            use_staticfs;       // Use external app file system for development
     _Atomic bool    run_server;
+    size_t          test_bin_count;
     // queue           queue_chartjs;
     // pthread_t       thread_chartjs_id;
     // ThreadArg       thread_arg;
@@ -36,7 +37,7 @@ static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
-static void call_test_bin(WrsRpc* rpc, size_t count, size_t size);
+static void call_test_bin(WrsRpc* rpc, size_t size);
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
 
 #define CHKT(COND) \
@@ -225,6 +226,25 @@ static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
     CHKT(cx_var_get_map_buf(params, "u8", (void*)&u8, &u8len));
     WRS_LOGD("%s: u8_len:%zu", __func__, u8len);
 
+    uint16_t* u16;
+    size_t u16len;
+    CHKT(cx_var_get_map_buf(params, "u16", (void*)&u16, &u16len));
+    WRS_LOGD("%s: u16_len:%zu", __func__, u16len);
+
+    uint32_t* u32;
+    size_t u32len;
+    CHKT(cx_var_get_map_buf(params, "u32", (void*)&u32, &u32len));
+    WRS_LOGD("%s: u32_len:%zu", __func__, u32len);
+
+    float* f32;
+    size_t f32len;
+    CHKT(cx_var_get_map_buf(params, "f32", (void*)&f32, &f32len));
+    WRS_LOGD("%s: f32_len:%zu", __func__, f32len);
+
+    double* f64;
+    size_t f64len;
+    CHKT(cx_var_get_map_buf(params, "f64", (void*)&f64, &f64len));
+    WRS_LOGD("%s: f64_len:%zu", __func__, f64len);
 
     return 0;
 }
@@ -233,59 +253,57 @@ static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
 static int cmd_test_bin(Cli* cli, void* udata) {
 
    AppState* app = udata;
-   ssize_t count = 1;
    ssize_t size  = 10;
    if (cli_argc(cli) > 1) {
-       count = strtol(cli_argv(cli, 1), NULL, 10);
+       app->test_bin_count = strtol(cli_argv(cli, 1), NULL, 10);
    }
    if (cli_argc(cli) > 2) {
        size = strtol(cli_argv(cli, 2), NULL, 10);
    }
 
-   call_test_bin(app->rpc1, count, size);
+   call_test_bin(app->rpc1, size);
    return CliOk;
 }
 
-static void call_test_bin(WrsRpc* rpc, size_t count, size_t size) {
+static void call_test_bin(WrsRpc* rpc, size_t size) {
 
-    for (size_t i = 0; i < count; i++) {
-        // Create parameters with non-initialized buffers
-        CxVar* params = cx_var_new(cxDefaultAllocator());
-        cx_var_set_map(params);
-        cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
-        cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
-        cx_var_set_map_buf(params, "f64", NULL, size * sizeof(double));
+    // Create parameters with non-initialized buffers
+    CxVar* params = cx_var_new(cxDefaultAllocator());
+    cx_var_set_map(params);
+    cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
+    cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
+    cx_var_set_map_buf(params, "f64", NULL, size * sizeof(double));
 
-        // Get buffers and initialize them
-        size_t len;
-        uint32_t* arru32;
-        cx_var_get_map_buf(params, "u32", (void*)&arru32, &len);
-        for (size_t i = 0; i < size; i++) {
-             arru32[i] = i;
-        }
-        float* arrf32;
-        cx_var_get_map_buf(params, "f32", (void*)&arrf32, &len);
-        for (size_t i = 0; i < size; i++) {
-             arrf32[i] = i*2;
-        }
-        double* arrf64;
-        cx_var_get_map_buf(params, "f64", (void*)&arrf64, &len);
-        for (size_t i = 0; i < size; i++) {
-             arrf64[i] = i*3;
-        }
-
-        int res = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
-        if (res) {
-            WRS_LOGE("%s: error from wrs_rpc_call()", __func__);
-            return;
-        }
-        WRS_LOGD("%s: called test_bin", __func__);
-        cx_var_del(params);
+    // Get buffers and initialize them
+    size_t len;
+    uint32_t* arru32;
+    cx_var_get_map_buf(params, "u32", (void*)&arru32, &len);
+    for (size_t i = 0; i < size; i++) {
+         arru32[i] = i;
     }
+    float* arrf32;
+    cx_var_get_map_buf(params, "f32", (void*)&arrf32, &len);
+    for (size_t i = 0; i < size; i++) {
+         arrf32[i] = i*2;
+    }
+    double* arrf64;
+    cx_var_get_map_buf(params, "f64", (void*)&arrf64, &len);
+    for (size_t i = 0; i < size; i++) {
+         arrf64[i] = i*3;
+    }
+
+    int res = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
+    if (res) {
+        WRS_LOGE("%s: error from wrs_rpc_call()", __func__);
+        return;
+    }
+    WRS_LOGD("%s: called test_bin", __func__);
+    cx_var_del(params);
 }
 
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
 
+    AppState* app = wrs_rpc_get_userdata(rpc);
     WRS_LOGD("%s: response test_bin", __func__);
     CxVar* data = cx_var_get_map_val(resp, "data");
     CHKT(data);
@@ -318,6 +336,11 @@ static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {
             WRS_LOGE("%s: f64 response error", __func__);
             break;
          }
+    }
+
+    if (app->test_bin_count > 0) {
+        call_test_bin(rpc, u32_len/sizeof(uint32_t));
+        app->test_bin_count--; 
     }
     
     return 0;

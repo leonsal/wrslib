@@ -70,7 +70,28 @@ function sumBinArrays(len) {
     for (let i  = 0; i < u8.length; i++) {
          u8[i] = i;
     }
-    const emsg = rpc.call("sum_bin_arrays", {u8});
+
+    const u16 = new Uint16Array(len);
+    for (let i  = 0; i < u16.length; i++) {
+         u16[i] = i;
+    }
+
+    const u32 = new Uint32Array(len);
+    for (let i  = 0; i < u32.length; i++) {
+         u32[i] = i;
+    }
+
+    const f32 = new Float32Array(len);
+    for (let i  = 0; i < f32.length; i++) {
+         f32[i] = i;
+    }
+
+    const f64 = new Float64Array(len);
+    for (let i  = 0; i < f64.length; i++) {
+         f64[i] = i;
+    }
+
+    const emsg = rpc.call("sum_bin_arrays", {u8, u16, u32, f32, f64});
     if (emsg) {
         logEvent(`ERROR: ${emsg}`);
     }
@@ -164,7 +185,7 @@ optionMap.set(optionCallClient, () => {
 
 optionMap.set(optionSumBinArrays, () => {
 
-    sumBinArrays(70000);
+    sumBinArrays(1_000_000);
 });
 
 // Returns this tab view

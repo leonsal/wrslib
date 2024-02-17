@@ -378,8 +378,6 @@ static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data) {
 // The handler should return 1 to keep the WebSocket connection open or 0 to close it.
 static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t data_size, void *user_data) {
 
-    WRS_LOGD("%s: data size:%zu", __func__, data_size);
-
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
