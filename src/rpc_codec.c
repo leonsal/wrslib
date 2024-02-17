@@ -305,6 +305,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
     }
     for (size_t i = 0; i < cxarr_var_len(&d->vars); i++) {
         BufInfo* buf = &d->buffers.data[i];
+        printf("src:%p len:%zu\n", buf->data, buf->len);
         cx_var_set_buf(d->vars.data[i], (void*)buf->data, buf->len);
     }
 

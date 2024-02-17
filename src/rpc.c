@@ -42,9 +42,19 @@ typedef struct ResponseInfo {
 #define cx_hmap_static
 #include "cx_hmap.h"
 
+// Define array websocket received bytes
+#define cx_array_name arru8
+#define cx_array_type uint8_t
+#define cx_array_static
+#define cx_array_instance_allocator
+#define cx_array_implement
+#include "cx_array.h"
+
 // State for each RPC client
 typedef struct RpcClient {
     struct mg_connection*   conn;           // CivitWeb server WebSocket client connection
+    int                     opcode;         // Initial opcode of group of fragments
+    arru8                   rxbytes;        // Received WebSocket bytes
     CxVar*                  rxmsg;          // Received msg
     CxVar*                  txmsg;          // Response msg
     WrsDecoder*             dec;            // Message decoder
@@ -88,6 +98,8 @@ static const char subprotocol_json[] = "Company.ProtoName.json";
 static const char *subprotocols[] = {subprotocol_bin, subprotocol_json, NULL};
 static struct mg_websocket_subprotocols wsprot = {2, subprotocols};
 
+#define WEBSOCKET_FIN_MASK   (0x80)  // FIN bit mask
+#define WEBSOCKET_OP_MASK    (0x0F)  // Opcode mask
 
 WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallback cb) {
 
@@ -311,6 +323,8 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
     // Create new RPC client state
     RpcClient new_client = {
         .conn = (struct mg_connection*)conn,
+        .opcode = -1,
+        .rxbytes = arru8_init(cxDefaultAllocator()),
         .dec = wrs_decoder_new(cxDefaultAllocator()),
         .enc = wrs_encoder_new(cxDefaultAllocator()),
         .rxmsg = cx_var_new(cxDefaultAllocator()),
@@ -362,9 +376,9 @@ static void wrs_rpc_ready_handler(struct mg_connection *conn, void *user_data) {
 // Handler called when RPC message received.
 // The message could be a remote call from the client or a response to a previous call from the server.
 // The handler should return 1 to keep the WebSocket connection open or 0 to close it.
-static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t dataSize, void *user_data) {
+static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *data, size_t data_size, void *user_data) {
 
-    WRS_LOGD("%s: data size:%zu", __func__, dataSize);
+    WRS_LOGD("%s: data size:%zu", __func__, data_size);
 
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
@@ -374,7 +388,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: message received with invalid connid:%zu", __func__, connid);
         assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-        return 0;
+        return 0; // CLOSE
     }
 
     // Get the RPC client associated with this connection and
@@ -383,26 +397,50 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     if (client->conn == NULL) {
         WRS_LOGW("%s: message received for closed connid:%zu", __func__, connid);
-        return 0;
+        return 0; // CLOSE
     }
 
+    // Saves first opcode of fragment group
+    if (client->opcode < 0) {
+        client->opcode = opcode;
+        arru8_clear(&client->rxbytes);
+    }
+
+    // Accumulates possible WebSocket message fragments data in internal buffer
+    const bool is_final = (opcode & WEBSOCKET_FIN_MASK) != 0; 
+    const bool is_cont = (opcode & WEBSOCKET_OP_MASK) == MG_WEBSOCKET_OPCODE_CONTINUATION;
+    if (!is_final || is_cont) {
+        arru8_pushn(&client->rxbytes, data, data_size);
+        WRS_LOGD("%s: received fragment: opcode:%d length:%zu", __func__, opcode & WEBSOCKET_OP_MASK, data_size);
+        if (!is_final) {
+            return 1; // Returns to receive more fragments
+        }
+    }
+    const int frame_flags = client->opcode & WEBSOCKET_OP_MASK;
+    client->opcode = -1;
+
     // Accepts text or binary messages only.
-    // Closes connection if client is not opened.
     bool text = true;
-    if ((opcode & 0xF) == MG_WEBSOCKET_OPCODE_TEXT) {
+    if (frame_flags == MG_WEBSOCKET_OPCODE_TEXT) {
         ;
-    } else if ((opcode & 0xF) == MG_WEBSOCKET_OPCODE_BINARY) {
+    } else if (frame_flags == MG_WEBSOCKET_OPCODE_BINARY) {
         text = false;
     } else {
-        WRS_LOGW("%s: WebSocket msg type:%d ignored", __func__, opcode & 0xF);
-        return 0;
+        WRS_LOGW("%s: WebSocket msg type:%d ignored", __func__, frame_flags);
+        return 1;
+    }
+    void* msg_data = data;
+    size_t msg_len = data_size;
+    if (arru8_len(&client->rxbytes) > 0) {
+        msg_data = client->rxbytes.data;
+        msg_len = arru8_len(&client->rxbytes);
     }
 
     // Decodes message and closes connection if invalid
-    int res = wrs_decoder_dec(client->dec, text, data, dataSize, client->rxmsg);
+    int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, client->rxmsg);
     if (res) {
         WRS_LOGE("%s: received invalid message", __func__);
-        return 0;
+        return 1; // DO NOT CLOSE
     }
 
     // Try to process this message as remote call

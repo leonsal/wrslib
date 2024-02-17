@@ -34,6 +34,7 @@ static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_get_time(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t count, size_t size);
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
@@ -80,6 +81,7 @@ int main(int argc, const char* argv[]) {
     wrs_rpc_set_userdata(app.rpc1, &app);
     CHKF(wrs_rpc_bind(app.rpc1, "get_time", rpc_get_time));
     CHKF(wrs_rpc_bind(app.rpc1, "get_lines", rpc_get_lines));
+    CHKF(wrs_rpc_bind(app.rpc1, "sum_bin_arrays", rpc_sum_bin_arrays));
 
     // Blocks processing commands
     command_line_loop(&app);
@@ -214,6 +216,19 @@ static int rpc_get_lines(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp)
     free(line);
     return 0;
 }
+
+static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+
+    // Get request parameters
+    uint8_t* u8;
+    size_t u8len;
+    CHKT(cx_var_get_map_buf(params, "u8", (void*)&u8, &u8len));
+    WRS_LOGD("%s: u8_len:%zu", __func__, u8len);
+
+
+    return 0;
+}
+
 
 static int cmd_test_bin(Cli* cli, void* udata) {
 

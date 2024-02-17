@@ -211,7 +211,6 @@ export class RPC extends EventTarget {
             totalLength += ChunkHeaderSize + buffers[i].byteLength;
             totalLength = alignOffset(totalLength);
         }
-        console.log("totalByteLength", totalLength);
 
         // Allocates message buffer with total size required
         const msgBuffer = new ArrayBuffer(totalLength);
@@ -244,6 +243,7 @@ export class RPC extends EventTarget {
             offset += buffer.byteLength;
             offset = alignOffset(offset);
         }
+        console.log("sendMsg: totalByteLength", msgBuffer.byteLength);
         this.#socket.send(msgBuffer);
         this.#callTime = performance.now();
     }

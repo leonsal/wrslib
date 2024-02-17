@@ -12,7 +12,7 @@ const optionGetLines1   = "rpc.get_lines1";
 const optionGetLines2   = "rpc.get_lines2";
 const optionGetLines3   = "rpc.get_lines3";
 const optionCallClient  = "rpc.call_client";
-const optionSumBinArray = "rpc.sum_bin_array";
+const optionSumBinArrays = "rpc.sum_bin_array";
 
 // Builds map of menu option id to function handler
 const optionMap = new Map();
@@ -63,6 +63,19 @@ function getLines(count, len) {
         logEvent(`ERROR: ${emsg}`);
     }
 }
+
+function sumBinArrays(len) {
+
+    const u8 = new Uint8Array(len);
+    for (let i  = 0; i < u8.length; i++) {
+         u8[i] = i;
+    }
+    const emsg = rpc.call("sum_bin_arrays", {u8});
+    if (emsg) {
+        logEvent(`ERROR: ${emsg}`);
+    }
+}
+
 
 rpc.bind("test_bin", function(params) {
 
@@ -149,35 +162,9 @@ optionMap.set(optionCallClient, () => {
     }
 });
 
-optionMap.set(optionSumBinArray, () => {
+optionMap.set(optionSumBinArrays, () => {
 
-    console.log("------------------------------------");
-
-    // const buf1 = new Uint8Array(3);
-    // for (let i  = 0; i < buf1.length; i++) {
-    //     buf1[i] = i + 10;
-    // }
-    // const buf2 = new Uint16Array(3);
-    // for (let i  = 0; i < buf2.length; i++) {
-    //     buf2[i] = i + 10;
-    // }
-    // const buf3 = new Uint32Array(3);
-    // for (let i  = 0; i < buf3.length; i++) {
-    //     buf3[i] = i + 10;
-    // }
-    // const buf4 = new Float32Array(3);
-    // for (let i  = 0; i < buf4.length; i++) {
-    //     buf4[i] = i + 10;
-    // }
-    // const buf5 = new Float64Array(3);
-    // for (let i  = 0; i < buf5.length; i++) {
-    //     buf5[i] = i + 10;
-    // }
-    // const emsg = rpc.call_bin("sum_bin_array", {array:0}, [buf1, buf2, buf3, buf4, buf5], (resp)=> {
-    // });
-    // if (emsg) {
-    //     logEvent(`ERROR: ${emsg}`);
-    // }
+    sumBinArrays(70000);
 });
 
 // Returns this tab view
@@ -213,7 +200,7 @@ export function getView() {
                         },
                         { value: "Binary", icon:"binary",
                             data: [
-                                { id: optionSumBinArray,   value: "sum_bin_array()"},
+                                { id: optionSumBinArrays, value: "sum_bin_arrays(1)"},
                             ],
                         }
                     ],
