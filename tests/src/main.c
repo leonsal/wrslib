@@ -34,7 +34,7 @@ static int parse_options(int argc, const char* argv[], AppState* apps);
 static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
-static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t size);
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
@@ -80,7 +80,7 @@ int main(int argc, const char* argv[]) {
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc1, &app);
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
-    //CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
+    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
 
     // Blocks processing commands
     command_line_loop(&app);
@@ -206,9 +206,14 @@ static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar*
     return 0;
 }
 
-static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
-    // Get request parameters
+    //
+    // Get message parameters
+    //
+    int64_t size;
+    CHKT(cx_var_get_map_int(params, "size", &size));
+
     uint8_t* u8;
     size_t u8len;
     CHKT(cx_var_get_map_buf(params, "u8", (void*)&u8, &u8len));
@@ -233,6 +238,48 @@ static int rpc_sum_bin_arrays(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
     size_t f64len;
     CHKT(cx_var_get_map_buf(params, "f64", (void*)&f64, &f64len));
     WRS_LOGD("%s: f64_len:%zu", __func__, f64len);
+
+    //
+    // Creates response 'data'
+    //
+    CxVar* map = cx_var_set_map_map(resp, "data");
+    cx_var_set_map_int(map, "size", size);
+
+    // Create and fill buffers
+    uint8_t* ru8;
+    size_t ru8len;
+    cx_var_get_buf(cx_var_set_map_buf(map, "u8", NULL, size * sizeof(uint8_t)), (void*)&ru8, &ru8len);
+    for (size_t i = 0; i < size; i++) {
+        ru8[i] = u8[i]+1;
+    }
+
+    uint16_t* ru16;
+    size_t ru16len;
+    cx_var_get_buf(cx_var_set_map_buf(map, "u16", NULL, size * sizeof(uint16_t)), (void*)&ru16, &ru16len);
+    for (size_t i = 0; i < size; i++) {
+        ru16[i] = u16[i]+1;
+    }
+
+    uint32_t* ru32;
+    size_t ru32len;
+    cx_var_get_buf(cx_var_set_map_buf(map, "u32", NULL, size * sizeof(uint32_t)), (void*)&ru32, &ru32len);
+    for (size_t i = 0; i < size; i++) {
+        ru32[i] = u32[i]+1;
+    }
+
+    float* rf32;
+    size_t rf32len;
+    cx_var_get_buf(cx_var_set_map_buf(map, "f32", NULL, size * sizeof(float)), (void*)&rf32, &rf32len);
+    for (size_t i = 0; i < size; i++) {
+        rf32[i] = f32[i]+1;
+    }
+
+    double* rf64;
+    size_t rf64len;
+    cx_var_get_buf(cx_var_set_map_buf(map, "f64", NULL, size * sizeof(double)), (void*)&rf64, &rf64len);
+    for (size_t i = 0; i < size; i++) {
+        rf64[i] = f64[i]+1;
+    }
 
     return 0;
 }
