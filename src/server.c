@@ -66,6 +66,16 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     mg_init_library(0);
     const struct mg_callbacks callbacks = {0};
     wrs->ctx = mg_start(&callbacks, wrs, (const char**) wrs->options.data);
+
+    // Free options array allocated elements
+    for (size_t i = 0; i < arr_opt_len(&wrs->options); i++) {
+        if (i % 2) {
+            free((char*)wrs->options.data[i]);
+        }
+    }
+    arr_opt_free(&wrs->options);
+
+    // Checks server error
     if (wrs->ctx == NULL) {
         WRS_LOGE("%s: error starting server", __func__);
         return NULL;
