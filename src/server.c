@@ -121,25 +121,21 @@ Wrs* wrs_create(const WrsConfig* cfg) {
 // Stops and destroy previously create wrs server
 void  wrs_destroy(Wrs* wrs) {
 
-    printf("stop ---------------------------------------------------\n");
     mg_stop(wrs->ctx);
     wrs->ctx = NULL;
 
     // Destroy all rpc endpoints
     // NOTE: wrs_rpc_close() deletes the its map entry so the loop must
     // initialize the iterator each time.
-    printf("destroy ---------------------------------------------------\n");
     while (true) {
         map_rpc_iter iter = {0};
         map_rpc_entry* e = map_rpc_next(&wrs->rpc_handlers, &iter);
         if (e == NULL) {
             break;
         }
-        printf("rpc_close---------------------------------------------------\n");
         wrs_rpc_close(e->val);
     }
     map_rpc_free(&wrs->rpc_handlers);
-
 
     cx_timer_destroy(wrs->tm);
     if (wrs->zip) {
@@ -148,9 +144,6 @@ void  wrs_destroy(Wrs* wrs) {
     assert(pthread_mutex_destroy(&wrs->lock) == 0);
     free(wrs);
 }
-
-
-
 
 //-----------------------------------------------------------------------------
 // Local functions

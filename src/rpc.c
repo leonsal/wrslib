@@ -55,8 +55,8 @@ typedef struct RpcClient {
     struct mg_connection*   conn;           // CivitWeb server WebSocket client connection
     int                     opcode;         // Initial opcode of group of fragments
     arru8                   rxbytes;        // Received WebSocket bytes
-    CxVar*                  rxmsg;          // Received msg
-    CxVar*                  txmsg;          // Response msg
+    // CxVar*                  rxmsg;          // Received msg
+    // CxVar*                  txmsg;          // Response msg
     WrsDecoder*             dec;            // Message decoder
     WrsEncoder*             enc;            // Message encoder
     uint64_t                cid;            // Next call id
@@ -325,8 +325,8 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
         .rxbytes = arru8_init(cxDefaultAllocator()),
         .dec = wrs_decoder_new(cxDefaultAllocator()),
         .enc = wrs_encoder_new(cxDefaultAllocator()),
-        .rxmsg = cx_var_new(cxDefaultAllocator()),
-        .txmsg = cx_var_new(cxDefaultAllocator()),
+        // .rxmsg = cx_var_new(cxDefaultAllocator()),
+        // .txmsg = cx_var_new(cxDefaultAllocator()),
         .cid = 100,
         .responses = map_resp_init(0),
     };
@@ -434,21 +434,25 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     }
 
     // Decodes message and closes connection if invalid
-    int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, client->rxmsg);
+    CxVar* rxmsg = cx_var_new(cxDefaultAllocator());
+    int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, rxmsg);
     if (res) {
+        cx_var_del(rxmsg);
         WRS_LOGE("%s: received invalid message", __func__);
         return 1; // DO NOT CLOSE
     }
 
     // Try to process this message as remote call
-    res = wrs_rpc_call_handler(rpc, client, connid, client->rxmsg);
+    res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
     if (res == 0) {
+        cx_var_del(rxmsg);
         return 1;
     }
 
     // Try to process this message as response from previous local call.
     if (res == 1) {
-        res = wrs_rpc_response_handler(rpc, client, connid, client->rxmsg);
+        res = wrs_rpc_response_handler(rpc, client, connid,rxmsg);
+        cx_var_del(rxmsg);
         if (res == 0) {
             return 1;
         }
@@ -490,25 +494,29 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     }
 
     // Prepare response
-    cx_var_set_map(client->txmsg);
-    cx_var_set_map_int(client->txmsg, "rid", cid);
-    CxVar* resp = cx_var_set_map_map(client->txmsg, "resp");
+    CxVar* txmsg = cx_var_new(cxDefaultAllocator());
+    cx_var_set_map(txmsg);
+    cx_var_set_map_int(txmsg, "rid", cid);
+    CxVar* resp = cx_var_set_map_map(txmsg, "resp");
 
     // Calls local function and if it returns error,
     // does not send any response to remote caller.
     int res = rinfo->fn(rpc, connid, params, resp);
     if (res) {
         WRS_LOGW("%s: local rpc function returned error", __func__);
+        cx_var_del(txmsg);
         return 0;
     }
 
     // If local function didn't generate a response, nothing else to do.
     if (!cx_var_get_map_val(resp, "err") && !cx_var_get_map_val(resp, "data")) {
+        cx_var_del(txmsg);
         return 0;
     }
 
     // Encodes message
-    res = wrs_encoder_enc(client->enc, client->txmsg);
+    res = wrs_encoder_enc(client->enc, txmsg);
+    cx_var_del(txmsg);
     if (res) {
         WRS_LOGE("%s: error encoding message", __func__);
         return 0;
@@ -566,8 +574,6 @@ static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t conni
 // Handler called when RPC client connection is closed.
 static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_data) {
 
-    printf("%s:----------------------\n", __func__);
-
     WrsRpc* rpc = user_data;
     const uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
     int res = 0;
@@ -604,8 +610,8 @@ static void wrs_rpc_free_conn(RpcClient* client) {
 
     client->conn = NULL;
     arru8_free(&client->rxbytes);
-    cx_var_del(client->rxmsg);
-    cx_var_del(client->txmsg);
+    // cx_var_del(client->rxmsg);
+    // cx_var_del(client->txmsg);
     wrs_decoder_del(client->dec);
     wrs_encoder_del(client->enc);
     map_resp_free(&client->responses);
