@@ -90,13 +90,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* rxmsg);
 static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t connid, const CxVar* msg);
 static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_data);
-
-// Define websocket sub-protocols
-// This must be static data, available between mg_start and mg_stop.
-static const char subprotocol_bin[] = "Company.ProtoName.bin";
-static const char subprotocol_json[] = "Company.ProtoName.json";
-static const char *subprotocols[] = {subprotocol_bin, subprotocol_json, NULL};
-static struct mg_websocket_subprotocols wsprot = {2, subprotocols};
+static void wrs_rpc_free_conn(RpcClient* client);
 
 #define WEBSOCKET_FIN_MASK   (0x80)  // FIN bit mask
 #define WEBSOCKET_OP_MASK    (0x0F)  // Opcode mask
@@ -127,8 +121,6 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
     map_rpc_set(&wrs->rpc_handlers, url_key, handler);
 
     // Register the websocket callback functions.
-    // mg_set_websocket_handler_with_subprotocols(wrs->ctx, url, &wsprot,
-    //     wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
     mg_set_websocket_handler(wrs->ctx, url,
         wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
 
@@ -140,20 +132,25 @@ exit:
 
 void wrs_rpc_close(WrsRpc* rpc) {
 
+    // Remove WebSocket handler
+    mg_set_websocket_handler(rpc->wrs->ctx, rpc->url, NULL, NULL, NULL, NULL, NULL);
+
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
 
     // Destroy all connections
     for (size_t i = 0; i < arr_conn_len(&rpc->conns); i++) {
-
+        RpcClient* client = &rpc->conns.data[i];
+        if (client->conn) {
+            wrs_rpc_free_conn(client);
+        }
     }
+    arr_conn_free(&rpc->conns);
+
     // Destroy bindings
     map_bind_free(&rpc->binds);
 
     // Remove association of url with this RPC handler
     map_rpc_del(&rpc->wrs->rpc_handlers, (char*)rpc->url);
-
-    // Remove WebSocket handler
-    mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
 
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     free(rpc); 
@@ -335,8 +332,6 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
     };
 
     // Looks for empty slot in the connections array
-    // Note that the previous object 'out' and 'callbacks' will
-    // be reused by the new connection.
     size_t connid = SIZE_MAX;
     for (size_t i = 0; i < arr_conn_len(&rpc->conns); i++) {
         if (rpc->conns.data[i].conn == NULL) {
@@ -571,6 +566,8 @@ static int wrs_rpc_response_handler(WrsRpc* rpc, RpcClient* client, size_t conni
 // Handler called when RPC client connection is closed.
 static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_data) {
 
+    printf("%s:----------------------\n", __func__);
+
     WrsRpc* rpc = user_data;
     const uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
     int res = 0;
@@ -591,9 +588,8 @@ static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_d
         goto exit;
     }
 
-    // Deallocates all memory used by this client connection and clears the 
-    // slot in the connections array, which can be reused for new connections.
-    memset(client, 0, sizeof(RpcClient));
+    // Deallocates all memory used by this client connection
+    wrs_rpc_free_conn(client);
     rpc->nconns--;
 
 exit:
@@ -604,4 +600,14 @@ exit:
     }
 }
 
+static void wrs_rpc_free_conn(RpcClient* client) {
+
+    client->conn = NULL;
+    arru8_free(&client->rxbytes);
+    cx_var_del(client->rxmsg);
+    cx_var_del(client->txmsg);
+    wrs_decoder_del(client->dec);
+    wrs_encoder_del(client->enc);
+    map_resp_free(&client->responses);
+}
 

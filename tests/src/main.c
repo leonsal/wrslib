@@ -89,6 +89,7 @@ int main(int argc, const char* argv[]) {
     //while (1) {sleep(1);}
 
     WRS_LOGI("Terminating...");
+    wrs_logger_del_handler(&wrs_default_logger, log_console_handler);
     cli_destroy(app.cli);
     wrs_destroy(app.wrs);
     return 0;

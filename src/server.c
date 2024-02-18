@@ -48,7 +48,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     wrs->options = arr_opt_init();
     if (cfg->document_root) {
         arr_opt_push(&wrs->options, "document_root");
-        char* document_root = malloc(strlen(cfg->document_root)+1);
+        char* document_root = strdup(cfg->document_root);
         strcpy(document_root, cfg->document_root);
         arr_opt_push(&wrs->options, document_root);
     }
@@ -67,7 +67,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     const struct mg_callbacks callbacks = {0};
     wrs->ctx = mg_start(&callbacks, wrs, (const char**) wrs->options.data);
 
-    // Free options array allocated elements
+    // Free options array allocated elements (odd indexes)
     for (size_t i = 0; i < arr_opt_len(&wrs->options); i++) {
         if (i % 2) {
             free((char*)wrs->options.data[i]);
@@ -121,20 +121,25 @@ Wrs* wrs_create(const WrsConfig* cfg) {
 // Stops and destroy previously create wrs server
 void  wrs_destroy(Wrs* wrs) {
 
+    printf("stop ---------------------------------------------------\n");
+    mg_stop(wrs->ctx);
+    wrs->ctx = NULL;
+
     // Destroy all rpc endpoints
     // NOTE: wrs_rpc_close() deletes the its map entry so the loop must
     // initialize the iterator each time.
+    printf("destroy ---------------------------------------------------\n");
     while (true) {
         map_rpc_iter iter = {0};
         map_rpc_entry* e = map_rpc_next(&wrs->rpc_handlers, &iter);
         if (e == NULL) {
             break;
         }
+        printf("rpc_close---------------------------------------------------\n");
         wrs_rpc_close(e->val);
     }
     map_rpc_free(&wrs->rpc_handlers);
 
-    mg_stop(wrs->ctx);
 
     cx_timer_destroy(wrs->tm);
     if (wrs->zip) {
