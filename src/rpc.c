@@ -438,7 +438,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, rxmsg);
     if (res) {
         cx_var_del(rxmsg);
-        WRS_LOGE("%s: received invalid message", __func__);
+        WRS_LOGE("%s: error decoding message", __func__);
         return 1; // DO NOT CLOSE
     }
 
@@ -458,6 +458,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
         }
     }
     // Close connection
+    WRS_LOGE("%s: received invalid message", __func__);
     return 0;
 }
 
