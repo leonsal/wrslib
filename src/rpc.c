@@ -156,6 +156,7 @@ void wrs_rpc_close(WrsRpc* rpc) {
     mg_set_websocket_handler_with_subprotocols(rpc->wrs->ctx, rpc->url, &wsprot, NULL, NULL, NULL, NULL, NULL);
 
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    free(rpc); 
 }
 
 void wrs_rpc_set_userdata(WrsRpc* rpc, void* userdata) {
