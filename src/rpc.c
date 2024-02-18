@@ -55,8 +55,8 @@ typedef struct RpcClient {
     struct mg_connection*   conn;           // CivitWeb server WebSocket client connection
     int                     opcode;         // Initial opcode of group of fragments
     arru8                   rxbytes;        // Received WebSocket bytes
-    // CxVar*                  rxmsg;          // Received msg
-    // CxVar*                  txmsg;          // Response msg
+    CxPoolAllocator*        rxalloc;        // Pool allocator for received msg CxVar
+    CxPoolAllocator*        txalloc;        // Pool allocator for transmitted msg CxVar 
     WrsDecoder*             dec;            // Message decoder
     WrsEncoder*             enc;            // Message encoder
     uint64_t                cid;            // Next call id
@@ -224,7 +224,6 @@ exit:
     return params;
 }
 
-
 int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb) {
 
     int res = 0;
@@ -286,7 +285,6 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     return 0;  
 }
 
-
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
 
     WrsRpcInfo info = {0};
@@ -297,6 +295,7 @@ WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     return info;
 }
+
 
 //-----------------------------------------------------------------------------
 // Local functions
@@ -325,8 +324,8 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
         .rxbytes = arru8_init(cxDefaultAllocator()),
         .dec = wrs_decoder_new(cxDefaultAllocator()),
         .enc = wrs_encoder_new(cxDefaultAllocator()),
-        // .rxmsg = cx_var_new(cxDefaultAllocator()),
-        // .txmsg = cx_var_new(cxDefaultAllocator()),
+        .rxalloc = cx_pool_allocator_create(4*4096, NULL),
+        .txalloc = cx_pool_allocator_create(4*4096, NULL),
         .cid = 100,
         .responses = map_resp_init(0),
     };
@@ -405,7 +404,6 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     const bool is_cont = (opcode & WEBSOCKET_OP_MASK) == MG_WEBSOCKET_OPCODE_CONTINUATION;
     if (!is_final || is_cont) {
         arru8_pushn(&client->rxbytes, data, data_size);
-        WRS_LOGD("%s: received fragment: opcode:%d length:%zu", __func__, opcode & WEBSOCKET_OP_MASK, data_size);
         if (!is_final) {
             return 1; // Returns to receive more fragments
         }
@@ -431,13 +429,14 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     if (arru8_len(&client->rxbytes) > 0) {
         msg_data = client->rxbytes.data;
         msg_len = arru8_len(&client->rxbytes);
+        WRS_LOGD("%s: received fragmented message with total length:%zu", __func__, msg_len);
     }
 
     // Decodes message and closes connection if invalid
-    CxVar* rxmsg = cx_var_new(cxDefaultAllocator());
+    CxVar* rxmsg = cx_var_new(cx_pool_allocator_iface(client->rxalloc));
     int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, rxmsg);
     if (res) {
-        cx_var_del(rxmsg);
+        cx_pool_allocator_clear(client->rxalloc);
         WRS_LOGE("%s: error decoding message", __func__);
         return 1; // DO NOT CLOSE
     }
@@ -445,14 +444,14 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     // Try to process this message as remote call
     res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
     if (res == 0) {
-        cx_var_del(rxmsg);
+        cx_pool_allocator_clear(client->rxalloc);
         return 1;
     }
 
     // Try to process this message as response from previous local call.
     if (res == 1) {
         res = wrs_rpc_response_handler(rpc, client, connid,rxmsg);
-        cx_var_del(rxmsg);
+        cx_pool_allocator_clear(client->rxalloc);
         if (res == 0) {
             return 1;
         }
@@ -495,7 +494,7 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     }
 
     // Prepare response
-    CxVar* txmsg = cx_var_new(cxDefaultAllocator());
+    CxVar* txmsg = cx_var_new(cx_pool_allocator_iface(client->txalloc));
     cx_var_set_map(txmsg);
     cx_var_set_map_int(txmsg, "rid", cid);
     CxVar* resp = cx_var_set_map_map(txmsg, "resp");
@@ -505,19 +504,19 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     int res = rinfo->fn(rpc, connid, params, resp);
     if (res) {
         WRS_LOGW("%s: local rpc function returned error", __func__);
-        cx_var_del(txmsg);
+        cx_pool_allocator_clear(client->txalloc);
         return 0;
     }
 
     // If local function didn't generate a response, nothing else to do.
     if (!cx_var_get_map_val(resp, "err") && !cx_var_get_map_val(resp, "data")) {
-        cx_var_del(txmsg);
+        cx_pool_allocator_clear(client->txalloc);
         return 0;
     }
 
     // Encodes message
     res = wrs_encoder_enc(client->enc, txmsg);
-    cx_var_del(txmsg);
+    cx_pool_allocator_clear(client->txalloc);
     if (res) {
         WRS_LOGE("%s: error encoding message", __func__);
         return 0;
@@ -607,12 +606,13 @@ exit:
     }
 }
 
+// Frees all connection allocated resources 
 static void wrs_rpc_free_conn(RpcClient* client) {
 
     client->conn = NULL;
     arru8_free(&client->rxbytes);
-    // cx_var_del(client->rxmsg);
-    // cx_var_del(client->txmsg);
+    cx_pool_allocator_destroy(client->txalloc);
+    cx_pool_allocator_destroy(client->rxalloc);
     wrs_decoder_del(client->dec);
     wrs_encoder_del(client->enc);
     map_resp_free(&client->responses);
