@@ -119,6 +119,7 @@ static CliCmd cmds[] = {
         .help = "Test calling browser with binary arrays",
         .handler = cmd_test_bin,
     },
+    {0}
 };
 
 static int parse_options(int argc, const char* argv[], AppState* apps) {
@@ -152,6 +153,13 @@ static void command_line_loop(AppState* app) {
         }
         // Parse comand line and execute command if possible
         int res = cli_parse(app->cli, line, app);
+        if (res == CliOk) {
+            // Adds command line to history
+            linenoiseHistoryAdd(line);
+            free(line);
+            continue;
+        }
+        free(line);
         if (res == CliEmptyLine) {
             continue;
         }
@@ -162,8 +170,6 @@ static void command_line_loop(AppState* app) {
         if (res < 0) {
             printf("%s\n", strerror(-res));
         }
-        // Adds command line to history
-        linenoiseHistoryAdd(line);
     }
 }
 

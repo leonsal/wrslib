@@ -5,21 +5,26 @@
 #include <unistd.h>
 #include <assert.h>
 #include <stdarg.h>
-#include <signal.h>
-#include <errno.h>
 #include <sys/eventfd.h>
 #include <pthread.h>
+
+#define cx_str_name cxstr
+#define cx_str_static
+#define cx_str_implement
+#include "cx_str.h"
+
+#define cx_array_name cxarr_str
+#define cx_array_type cxstr
+#define cx_array_static
+#define cx_array_implement
+#include "cx_array.h"
 
 #include "linenoise.h"
 #include "cli.h"
 
 typedef struct Cli {
     const CliCmd*   cmds;       // Array of command descriptions (last command name = NULL);
-    size_t          linecap;    // Current line capacity in bytes
-    char*           line;       // Pointer to current line
-    size_t          argcap;     // Current arguments array capacity
-    size_t          argc;       // Current number of arguments
-    char**          argv;       // Pointer to array of argument pointers
+    cxarr_str       args;       // Array of parsed arguments from command line
     bool            exit;
     struct linenoiseState ls;
     bool            linenoiseEdit;
@@ -31,12 +36,8 @@ Cli* cli_create(const CliCmd* cmds) {
 
     Cli* cli = calloc(1, sizeof(Cli));
     cli->cmds = cmds;
+    cli->args = cxarr_str_init();
 
-    cli->linecap = 132;
-    cli->line = malloc(cli->linecap + 1);
-
-    cli->argcap = 10;
-    cli->argv = malloc((cli->argcap+1) * sizeof(char*));
     cli->evfd = eventfd(0, 0);
     assert(cli->evfd >= 0);
     assert(pthread_mutex_init(&cli->lock, NULL) == 0);
@@ -47,8 +48,10 @@ void cli_destroy(Cli* cli) {
 
     close(cli->evfd);
     assert(pthread_mutex_destroy(&cli->lock) == 0);
-    free(cli->argv);
-    free(cli->line);
+    for (size_t i = 0; i < cxarr_str_len(&cli->args); i++) {
+        cxstr_free(&cli->args.data[i]);
+    }
+    cxarr_str_free(&cli->args);
     free(cli);
 }
 
@@ -115,52 +118,43 @@ void cli_printf(Cli* cli, const char* fmt, ...) {
 
 CliResult cli_parse(Cli* cli, char* line, void* udata) {
 
-    const size_t len = strlen(line);
-    if (len > cli->linecap) {
-        cli->line = realloc(cli->line, len + 1);
-        cli->linecap = len;
+    for (size_t i = 0; i < cxarr_str_len(&cli->args); i++) {
+        cxstr_free(&cli->args.data[i]);
     }
-    strcpy(cli->line, line);
+    cxarr_str_clear(&cli->args);
 
-    cli->argc = 0;
-    char* p = cli->line;
+    char* p = line;
     while (*p) {
         // Ignore leading spaces
         if (isspace(*p)) {
             p++;
             continue;
         }
+        // Checks for line termination
         if (!*p) {
             break;
         }
         // Start of argument
-        cli->argv[cli->argc] = p;
-        cli->argc++;
-        // Looks for argument end
+        char* arg_start = p;
+        size_t arg_len = 0;
+        // Looks for argument end or line termination
         while (*p && !isspace(*p)) {
             p++;
+            arg_len++;
         }
-        if (!*p) {
-            break;
-        }
-        // Terminates the argument string
-        *p = 0;
-        p++;
-        // Reallocates array of arguments pointer if necessary
-        if (cli->argc >= cli->argcap) {
-            cli->argcap *= 2;
-            cli->argv = realloc(cli->argv, (cli->argcap+1) * sizeof(char*));
-        }
+        // Adds argument to array
+        cxstr arg = cxstr_initn(arg_start, arg_len);
+        cxarr_str_push(&cli->args, arg);
     }
 
-    if (cli->argc == 0) {
+    if (cxarr_str_len(&cli->args) == 0) {
         return CliEmptyLine;
     }
 
     // Find command with name equal to first argument
     const CliCmd* pc = cli->cmds;
     while (pc->name) {
-        if (strcmp(pc->name, cli->argv[0]) == 0) {
+        if (strcmp(pc->name, cli->args.data[0].data) == 0) {
             return pc->handler(cli, udata);
         }
         pc++;
@@ -170,15 +164,15 @@ CliResult cli_parse(Cli* cli, char* line, void* udata) {
 
 int cli_argc(Cli* cli) {
 
-    return cli->argc;
+    return cxarr_str_len(&cli->args);
 }
 
 const char* cli_argv(Cli* cli, size_t idx) {
 
-    if (idx >= cli->argc) {
+    if (idx >= cxarr_str_len(&cli->args)) {
         return NULL;
     }
-    return cli->argv[idx];
+    return cli->args.data[idx].data;
 }
 
 void cli_force_exit(Cli* cli) {
