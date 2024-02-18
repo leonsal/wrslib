@@ -246,6 +246,9 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
         return cx_json_parse(data, len, msg, &cfg);
     }
 
+    cxarr_buf_clear(&d->buffers);
+    cxarr_var_clear(&d->vars);
+
     // Decode the message chunks in any order
     void* last = data + len;
     void* curr = data;

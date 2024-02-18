@@ -35,6 +35,7 @@ static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t size);
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp);
@@ -81,10 +82,13 @@ int main(int argc, const char* argv[]) {
     wrs_rpc_set_userdata(app.rpc1, &app);
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
+    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
 
     // Blocks processing commands
     command_line_loop(&app);
+    //while (1) {sleep(1);}
 
+    WRS_LOGI("Terminating...");
     cli_destroy(app.cli);
     wrs_destroy(app.wrs);
     return 0;
@@ -330,6 +334,13 @@ static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
     return 0;
 }
 
+static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+
+    AppState* app = wrs_rpc_get_userdata(rpc);
+    app->run_server = false;
+    cli_force_exit(app->cli);
+    return 0;
+}
 
 static int cmd_test_bin(Cli* cli, void* udata) {
 

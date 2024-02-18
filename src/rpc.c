@@ -427,6 +427,9 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
         WRS_LOGW("%s: WebSocket msg type:%d ignored", __func__, frame_flags);
         return 1;
     }
+
+    // Sets the pointer and length of message to decode, depending on
+    // it came directly from WebSocket server or the accumulated buffer.
     void* msg_data = data;
     size_t msg_len = data_size;
     if (arru8_len(&client->rxbytes) > 0) {
@@ -446,6 +449,7 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     if (res == 0) {
         return 1;
     }
+
     // Try to process this message as response from previous local call.
     if (res == 1) {
         res = wrs_rpc_response_handler(rpc, client, connid, client->rxmsg);
@@ -499,6 +503,11 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     int res = rinfo->fn(rpc, connid, params, resp);
     if (res) {
         WRS_LOGW("%s: local rpc function returned error", __func__);
+        return 0;
+    }
+
+    // If local function didn't generate a response, nothing else to do.
+    if (!cx_var_get_map_val(resp, "err") && !cx_var_get_map_val(resp, "data")) {
         return 0;
     }
 

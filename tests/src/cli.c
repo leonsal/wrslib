@@ -2,8 +2,12 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <signal.h>
+#include <errno.h>
+#include <sys/eventfd.h>
 #include <pthread.h>
 
 #include "linenoise.h"
@@ -19,6 +23,7 @@ typedef struct Cli {
     bool            exit;
     struct linenoiseState ls;
     bool            linenoiseEdit;
+    int             evfd;
     pthread_mutex_t lock;
 } Cli;
 
@@ -32,12 +37,15 @@ Cli* cli_create(const CliCmd* cmds) {
 
     cli->argcap = 10;
     cli->argv = malloc((cli->argcap+1) * sizeof(char*));
+    cli->evfd = eventfd(0, 0);
+    assert(cli->evfd >= 0);
     assert(pthread_mutex_init(&cli->lock, NULL) == 0);
     return cli;
 }
 
 void cli_destroy(Cli* cli) {
 
+    close(cli->evfd);
     assert(pthread_mutex_destroy(&cli->lock) == 0);
     free(cli->argv);
     free(cli->line);
@@ -54,11 +62,16 @@ char* cli_get_line(Cli* cli, const char* prompt) {
         fd_set readfds;
         FD_ZERO(&readfds);
         FD_SET(cli->ls.ifd, &readfds);
-        int retval = select(cli->ls.ifd+1, &readfds, NULL, NULL, NULL);
+        FD_SET(cli->evfd, &readfds);
+        int retval = select(cli->evfd+1, &readfds, NULL, NULL, NULL);
         if (retval == -1) {
             perror("select()");
             exit(1);
         } else if (retval >= 0) {
+            if (cli->exit) {
+                line = NULL;
+                break;
+            }
             assert(pthread_mutex_lock(&cli->lock) == 0);
             line = linenoiseEditFeed(&cli->ls);
             assert(pthread_mutex_unlock(&cli->lock) == 0);
@@ -166,6 +179,12 @@ const char* cli_argv(Cli* cli, size_t idx) {
         return NULL;
     }
     return cli->argv[idx];
+}
+
+void cli_force_exit(Cli* cli) {
+
+    cli->exit = true;
+    write(cli->evfd, (uint64_t[]){1}, sizeof(uint64_t));
 }
 
 bool cli_exit(Cli* cli) {

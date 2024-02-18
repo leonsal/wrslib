@@ -53,6 +53,8 @@ int cli_argc(Cli* cli);
 // Returns pointer to specified argument from the last call of cli_parse()
 const char* cli_argv(Cli* cli, size_t idx);
 
+void  cli_force_exit(Cli* cli);
+
 // Returns if exit command executed
 bool cli_exit(Cli* cli);
 

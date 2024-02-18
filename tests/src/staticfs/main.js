@@ -28,17 +28,18 @@ const mainMenu = {
     on: {
         onMenuItemClick:function(menuId){
             if (menuId == MENUID_EXIT) {
-                const emsg = App.rpc.call('exit');
+                const rpc = new RPC('/rpc1');
+                const emsg = rpc.open();
                 if (emsg) {
                     console.log("EXIT", emsg);
-                    App.rpc.open();
-                    App.rpc.addEventListener(RPC.EV_OPENED, () => {
-                        const emsg = App.rpc.call('exit');
-                        if (emsg) {
-                            console.log("EXIT2", emsg);
-                        }
-                    });
+                    return;
                 }
+                rpc.addEventListener(RPC.EV_OPENED, () => {
+                    const emsg = rpc.call('rpc_server_exit');
+                    if (emsg) {
+                        console.log("EXIT2", emsg);
+                    }
+                });
                 return;
             }
             // Get function associated with the menu id to create the tab view body
@@ -49,7 +50,6 @@ const mainMenu = {
             // Get the view id and the create view function
             // If tab already open, just sets its active.
             const {viewId, view} = viewfn();
-            console.log("VIEW------------------->", viewId, view);
             if (App.isTabViewActive(viewId)) {
                 $$("main.tabview").setValue(viewId);
                 return;
