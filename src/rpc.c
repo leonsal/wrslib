@@ -283,6 +283,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
         ResponseInfo rinfo = {.fn = cb };
         clock_gettime(CLOCK_REALTIME, &rinfo.time);
         map_resp_set(&client->responses, cid, rinfo);
+        //WRS_LOGD("%s: map_resp_len:%zu", __func__, map_resp_count(&client->responses));
     }
 
     return 0;  
