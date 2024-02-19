@@ -233,6 +233,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
         assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+        cx_var_del(params);
         return 1;
     }
 
@@ -241,6 +242,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     if (client->conn == NULL) {
         WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
+        cx_var_del(params);
         return 1;
     }
   
@@ -255,6 +257,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
 
     // Encodes message
     res = wrs_encoder_enc(client->enc, msg);
+    cx_var_del(msg);
     if (res) {
         WRS_LOGE("%s: error encoding message", __func__);
         return 1;

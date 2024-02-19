@@ -116,8 +116,8 @@ static CliCmd cmds[] = {
         .handler = cli_cmd_exit,
     },
     {
-        .name = "test_bin",
-        .help = "Test calling browser with binary arrays",
+        .name = "call_test_bin",
+        .help = "Call browser with binary arrays: [<count> [<size>]]",
         .handler = cmd_test_bin,
     },
     {0}
@@ -367,6 +367,7 @@ static int cmd_test_bin(Cli* cli, void* udata) {
 static void call_test_bin(WrsRpc* rpc, size_t size) {
 
     // Create parameters with non-initialized buffers
+    // NOTE: params will be deallocated by wrs_rpc_call()
     CxVar* params = cx_var_new(cxDefaultAllocator());
     cx_var_set_map(params);
     cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
@@ -397,7 +398,6 @@ static void call_test_bin(WrsRpc* rpc, size_t size) {
         return;
     }
     WRS_LOGD("%s: called test_bin", __func__);
-    cx_var_del(params);
 }
 
 static int resp_test_bin(WrsRpc* rpc, size_t connid, CxVar* resp) {

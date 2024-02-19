@@ -117,6 +117,7 @@ typedef int (*WrsResponseFn)(WrsRpc* rpc, size_t connid, CxVar* resp);
 // connid - identifies the specific connection for this endpoint
 // remote_name - the name of the remote function to call
 // params - message with parameters to send to remote function
+//  this should be allocated by the user, but is deallocated by this function
 // cb - Optional callback to receive response from remote function
 // Returns non zero value on errors.
 // After the function returns, the 'params' CxVar may be destroyed.

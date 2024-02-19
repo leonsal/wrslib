@@ -41,6 +41,10 @@ function logRPC(ev) {
 
 function callTextMsg(count, size, async) {
 
+    if (count > 10) {
+        logEvent(`Sending: ${count} calls with text arrays of size: ${size} to server`);
+    }
+
     const sentParams = [];
     const call_remote = function() {
         // Build call parameters
@@ -138,6 +142,10 @@ function callTextMsg(count, size, async) {
 }
 
 function callBinaryMsg(count, size, async) {
+
+    if (count > 10) {
+        logEvent(`Sending: ${count} calls with binary arrays of size: ${size} to server`);
+    }
 
     const sentParams = [];
     const call_remote = function() {
@@ -247,8 +255,6 @@ function callBinaryMsg(count, size, async) {
 
 rpc.bind("test_bin", function(params) {
 
-    console.log("test_bin", params);
-
     const u32 = new Uint32Array(params.u32);
     for (let i = 0; i < u32.length; i++) {
         u32[i] += 1;
@@ -263,6 +269,7 @@ rpc.bind("test_bin", function(params) {
     for (let i = 0; i < f64.length; i++) {
         f64[i] += 1;
     }
+    logEvent(`Received call from server with binary arrays of size: ${f64.length} to server`);
 
     return {data: {u32, f32, f64}};
 });
