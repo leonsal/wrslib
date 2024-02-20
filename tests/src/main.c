@@ -369,6 +369,8 @@ static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
 static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
     AppState* app = wrs_rpc_get_userdata(rpc);
+    WRS_LOGD("%s:", __func__);
+    CxVar* map = cx_var_set_map_map(resp, "data");
     return 0;
 }
 

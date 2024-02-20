@@ -5,19 +5,32 @@ const VIEW_ID = "tab.chartjs";
 const RPC_URL = "/rpc2";
 const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
 const SLIDER_POINTS_ID = "tab.chartjs.slider.points";
+const SLIDER_FPS_ID = "tab.chartjs.slider.fps";
 
 const rpc = new RPC(RPC_URL);
 rpc.bind("updateChartJS", updateChartJS);
+
+let timeoutId = null;
+
+function requestChart() {
+
+    const fps = $$(SLIDER_FPS_ID).getValue();
+    const delayMs = (1.0/fps) * 1000;
+    rpc.call("rpc_server_chart_run", {}, (resp) => {
+
+        timeoutId = setTimeout(requestChart, delayMs);
+    });
+}
 
 function rpcEvents(ev) {
 
     console.log("RPC: %s url:%s", ev.type, ev.detail.url);
     if (ev.type == RPC.EV_OPENED) {
-        const params = {
-            freq: $$(SLIDER_FREQ_ID).getValue(),
-            npoints: $$(SLIDER_POINTS_ID).getValue(),
-        }
-        rpc.call("rpc_server_chart_set", params);
+        const freq = $$(SLIDER_FREQ_ID).getValue();
+        const npoints =  $$(SLIDER_POINTS_ID).getValue();
+        rpc.call("rpc_server_chart_set", {freq, npoints});
+        requestChart();
+        return;
     }
 }
 
@@ -116,6 +129,7 @@ export function getView() {
                         },
                         {
                             view:   "slider",
+                            id:     SLIDER_FPS_ID,
                             width:  200,
                             title:  webix.template("fps: #value#"),
                             moveTitle: false,
@@ -123,14 +137,6 @@ export function getView() {
                             min:    2,
                             max:    60,
                             name:   "sfreq",
-                            on: {
-                                onSliderDrag: function() {
-                                    //rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
-                                },
-                                onChange:function(){
-                                    //rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
-                                },
-                            },
                         },
                     ],
                 },
