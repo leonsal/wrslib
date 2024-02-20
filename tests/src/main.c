@@ -15,6 +15,7 @@ extern const unsigned int  gStaticfsZipSize;
 // Chart state
 typedef struct Chart {
     int64_t freq;
+    int64_t noise;
     int64_t npoints;
     double  phase;
     double  sample_rate;
@@ -367,6 +368,7 @@ static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
 
     AppState* app = wrs_rpc_get_userdata(rpc);
     cx_var_get_map_int(params, "freq", &app->chart.freq);
+    cx_var_get_map_int(params, "noise", &app->chart.noise);
     cx_var_get_map_int(params, "npoints", &app->chart.npoints);
     WRS_LOGD("%s: freq:%ld, npoints:%ld", __func__, app->chart.freq, app->chart.npoints);
     return 0;
@@ -374,6 +376,7 @@ static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
 
 static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
+    //WRS_LOGD("%s:", __func__);
     AppState* app = wrs_rpc_get_userdata(rpc);
 
     // Creates response buffers and get address to its data
@@ -386,10 +389,12 @@ static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
     float* label_data;
     cx_var_get_buf(label, (void*)&label_data, &len);
 
-    // Generates signal
+    // Generates signal and labels
     const double delta = (double)app->chart.freq / app->chart.sample_rate;
     for (size_t i = 0; i < app->chart.npoints; i++) {
         signal_data[i] = sin(app->chart.phase);
+        const float noise = (50-(rand() % 100)) * app->chart.noise / 20000.0;
+        signal_data[i] += noise;
         label_data[i] = i;
         app->chart.phase += delta;
         if (app->chart.phase >= 2*M_PI) {

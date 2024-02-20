@@ -5,10 +5,10 @@ import * as tabChartJS from "./tab_chartjs.js";
 
 // Associate menu ids with function with creates associated view
 const MENUID_RPC = "menu.rpc";
-const MENUID_CHARTJS = "menu.chartjs";
+const MENUID_CHART = "menu.chartjs";
 const MENUID_EXIT = "menu.exit";
 App.setTabViewFunc(MENUID_RPC, tabRPC.getView);
-App.setTabViewFunc(MENUID_CHARTJS, tabChartJS.getView);
+App.setTabViewFunc(MENUID_CHART, tabChartJS.getView);
 
 const mainMenu = {
     view: "menu",
@@ -19,7 +19,7 @@ const mainMenu = {
             value: "Tests",
             submenu: [
                 {id: MENUID_RPC, value: "RPC"},
-                {id: MENUID_CHARTJS, value: "Chart JS"},
+                {id: MENUID_CHART, value: "Chart"},
                 {$template: "Separator"},
                 {id: MENUID_EXIT, value: "Exit"},
             ]

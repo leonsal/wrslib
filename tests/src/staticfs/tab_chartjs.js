@@ -4,38 +4,53 @@ import {RPC} from "./rpc.js";
 const RPC_URL = "/rpc2";
 const VIEW_ID = "tab.chartjs";
 const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
+const SLIDER_NOISE_ID = "tab.chartjs.noise.freq";
 const SLIDER_POINTS_ID = "tab.chartjs.slider.points";
 const SLIDER_FPS_ID = "tab.chartjs.slider.fps";
 const CHART_ID = "tab.chartjs.chart";
-
+const SLIDER_WIDTH = 160;
 const rpc = new RPC(RPC_URL);
 
 let timeoutId = null;
+let lastRequest = null;
 
 function requestChart() {
 
-    const fps = $$(SLIDER_FPS_ID).getValue();
-    const delayMs = (1.0/fps) * 1000;
+    //console.log(`elapsed": ${(performance.now() - lastRequest).toFixed(2)}`);
+    lastRequest = performance.now();
+
     rpc.call("rpc_server_chart_run", {}, (resp) => {
-  
+ 
+        // Get chart labels and signal
         const label = new Float32Array(resp.data.label);
         const signal = new Float32Array(resp.data.signal);
 
+        // Updates chart
         $$(CHART_ID).chart.data.labels = Array.from(label);
         $$(CHART_ID).chart.data.datasets[0].data = Array.from(signal);
         $$(CHART_ID).chart.update();
-
-        timeoutId = setTimeout(requestChart, delayMs);
     });
+
+    if (timeoutId === null) {
+        const fps = $$(SLIDER_FPS_ID).getValue();
+        console.log("FPS----------->", fps);
+        const delayMs = (1.0 / fps) * 1000;
+        timeoutId = setInterval(requestChart, delayMs);
+    }
 }
 
 function rpcEvents(ev) {
 
-    console.log("RPC: %s url:%s", ev.type, ev.detail.url);
     if (ev.type == RPC.EV_OPENED) {
+
+        // Updates chart parameters
         const freq = $$(SLIDER_FREQ_ID).getValue();
+        const noise=  $$(SLIDER_NOISE_ID).getValue();
         const npoints =  $$(SLIDER_POINTS_ID).getValue();
-        rpc.call("rpc_server_chart_set", {freq, npoints});
+        rpc.call("rpc_server_chart_set", {freq, noise, npoints});
+
+        // Starts requesting
+        lastRequest = performance.now();
         requestChart();
         return;
     }
@@ -46,7 +61,7 @@ function rpcEvents(ev) {
 export function getView() {
 
     const tabView = {
-        header: "ChartJS",
+        header: "Chart",
         close: true,
         body: {
             id: VIEW_ID,
@@ -83,6 +98,8 @@ export function getView() {
                             css:    "webix_primary",
                             autowidth:  true,
                             click: function() {
+                                clearTimeout(timeoutId);
+                                timeoutId = null;
                                 const emsg = rpc.close();
                                 if (emsg) {
                                     console.log(emsg);
@@ -93,12 +110,12 @@ export function getView() {
                         {
                             view:   "slider",
                             id:     SLIDER_FREQ_ID,
-                            width:  200,
+                            width:  SLIDER_WIDTH,
                             title:  webix.template("freq: #value#Hz"),
                             moveTitle: false,
-                            value:  '60',
+                            value:  '300',
                             min:    10,
-                            max:    1024,
+                            max:    8000,
                             on: {
                                 onSliderDrag: function() {
                                     rpc.call("rpc_server_chart_set", {freq: this.getValue()});
@@ -110,11 +127,29 @@ export function getView() {
                         },
                         {
                             view:   "slider",
+                            id:     SLIDER_NOISE_ID,
+                            width:  SLIDER_WIDTH,
+                            title:  webix.template("noise: #value#%"),
+                            moveTitle: false,
+                            value:  '0',
+                            min:    0,
+                            max:    50,
+                            on: {
+                                onSliderDrag: function() {
+                                    rpc.call("rpc_server_chart_set", {noise: this.getValue()});
+                                },
+                                onChange:function(){
+                                    rpc.call("rpc_server_chart_set", {noise: this.getValue()});
+                                },
+                            },
+                        },
+                        {
+                            view:   "slider",
                             id:     SLIDER_POINTS_ID,
-                            width:  200,
+                            width:  SLIDER_WIDTH,
                             title:  webix.template("npoints: #value#"),
                             moveTitle: false,
-                            value:  '128',
+                            value:  '1024',
                             min:    16,
                             max:    2048,
                             on: {
@@ -129,13 +164,28 @@ export function getView() {
                         {
                             view:   "slider",
                             id:     SLIDER_FPS_ID,
-                            width:  200,
+                            width:  SLIDER_WIDTH,
                             title:  webix.template("fps: #value#"),
                             moveTitle: false,
-                            value:  '2',
+                            value:  '20',
                             min:    2,
                             max:    60,
-                            name:   "sfreq",
+                            on: {
+                                onSliderDrag: function() {
+                                    if (timeoutId) {
+                                        clearTimeout(timeoutId);
+                                        timeoutId = null;
+                                        requestChart();
+                                    }
+                                },
+                                onChange:function(){
+                                    if (timeoutId) {
+                                        clearTimeout(timeoutId);
+                                        timeoutId = null;
+                                        requestChart();
+                                    }
+                                },
+                            },
                         },
                     ],
                 },
@@ -151,7 +201,7 @@ export function getView() {
 				            labels: ['1','2','3','4','5'],
 				            datasets: [
                                 {
-                                    label: "data 1",
+                                    label: "signal",
                                     data:  [1,2,3,4,5],
                                     borderColor: "blue",
                                     borderWidth: 1,
@@ -185,80 +235,3 @@ export function getView() {
     return {viewId: VIEW_ID, view: tabView};
 }
 
-	// chart1 = w.NewView(js.Obj{
-	// 	"view": "chartjs",                           // component name
-	// 	"id":   w.GenId(),                           // view id
-	// 	"css":  js.Obj{"background-color": "white"}, // canvas backgroud
-	// 	// Chartjs configuration starts here
-	// 	"config": js.Obj{
-	// 		"type": "line",
-	// 		"data": js.Obj{
-	// 			"labels": []float64{},
-	// 			"datasets": js.Array{
-	// 				js.Obj{
-	// 					"label":       "data 1",
-	// 					"data":        []float64{},
-	// 					"borderColor": "blue",
-	// 					"borderWidth": 1,
-	// 					"pointRadius": 0,
-	// 				},
-	// 			},
-	// 		},
-	// 		"options": js.Obj{
-	// 			"maintainAspectRatio": false,
-	// 			"animation":           false,
-	// 			"plugins": js.Obj{
-	// 				"title": js.Obj{
-	// 					"display": true,
-	// 					"text":    "Chart1 title",
-	// 				},
-	// 			},
-	// 			"legend": js.Obj{
-	// 				"display": false,
-	// 			},
-	// 			"scales": js.Obj{
-	// 				"x": js.Obj{
-	// 					"type": "linear",
-	// 					//	//"min":  0,
-	// 					//	//"max":  10,
-	// 					//	"ticks": js.Obj{
-	// 					//		"source": "auto",
-	// 					//	},
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// })
-	// view.Add(chart1)
-	//
-	// chart2 := w.NewView(js.Obj{
-	// 	"view": "chartjs",                           // component name
-	// 	"id":   w.GenId(),                           // view id
-	// 	"css":  js.Obj{"background-color": "white"}, // canvas backgroud
-	// 	// Chartjs configuration starts here
-	// 	"config": js.Obj{
-	// 		"type": "line",
-	// 		"data": js.Obj{
-	// 			"labels": []float64{0, 1, 2, 3, 4, 5, 6, 7, 8, 9},
-	// 			"datasets": js.Array{
-	// 				js.Obj{
-	// 					"label":       "data 1",
-	// 					"data":        []float64{-10, -8, -5, 0, 1, 2, 3, 4, 10, 4, 3, 2, 1, 0},
-	// 					"borderColor": "black",
-	// 				},
-	// 			},
-	// 		},
-	// 		"options": js.Obj{
-	// 			"maintainAspectRatio": false,
-	// 			"animation":           false,
-	// 			"plugins": js.Obj{
-	// 				"title": js.Obj{
-	// 					"display": true,
-	// 					"text":    "Chart title",
-	// 				},
-	// 			},
-	// 		},
-	// 	},
-	// })
-	// view.Add(chart2)
-	//
