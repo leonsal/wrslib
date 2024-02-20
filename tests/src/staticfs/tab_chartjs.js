@@ -3,10 +3,22 @@ import {RPC} from "./rpc.js";
 
 const VIEW_ID = "tab.chartjs";
 const RPC_URL = "/rpc2";
+const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
+const SLIDER_POINTS_ID = "tab.chartjs.slider.points";
 
-function  rpcEvents(ev) {
+const rpc = new RPC(RPC_URL);
+rpc.bind("updateChartJS", updateChartJS);
+
+function rpcEvents(ev) {
 
     console.log("RPC: %s url:%s", ev.type, ev.detail.url);
+    if (ev.type == RPC.EV_OPENED) {
+        const params = {
+            freq: $$(SLIDER_FREQ_ID).getValue(),
+            npoints: $$(SLIDER_POINTS_ID).getValue(),
+        }
+        rpc.call("rpc_server_chart_set", params);
+    }
 }
 
 function updateChartJS(params) {
@@ -16,8 +28,6 @@ function updateChartJS(params) {
     $$('chartjs1').chart.update();
 }
 
-const rpc = new RPC(RPC_URL);
-rpc.bind("updateChartJS", updateChartJS);
 
 
 // Returns this view
@@ -70,6 +80,7 @@ export function getView() {
                         },
                         {
                             view:   "slider",
+                            id:     SLIDER_FREQ_ID,
                             width:  200,
                             title:  webix.template("freq: #value#Hz"),
                             moveTitle: false,
@@ -78,15 +89,16 @@ export function getView() {
                             max:    1024,
                             on: {
                                 onSliderDrag: function() {
-                                    rpc.call("chartjs_set", {'cmd': 'freq', 'value': this.getValue()});
+                                    rpc.call("rpc_server_chart_set", {freq: this.getValue()});
                                 },
                                 onChange:function(){
-                                    rpc.call("chartjs_set", {'cmd': 'freq', 'value': this.getValue()});
+                                    rpc.call("rpc_server_chart_set", {freq: this.getValue()});
                                 },
                             },
                         },
                         {
                             view:   "slider",
+                            id:     SLIDER_POINTS_ID,
                             width:  200,
                             title:  webix.template("npoints: #value#"),
                             moveTitle: false,
@@ -95,10 +107,10 @@ export function getView() {
                             max:    2048,
                             on: {
                                 onSliderDrag: function() {
-                                    rpc.call("chartjs_set", {'cmd': 'npoints', 'value': this.getValue()});
+                                    rpc.call("rpc_server_chart_set", {npoints: this.getValue()});
                                 },
                                 onChange:function(){
-                                    rpc.call("chartjs_set", {'cmd': 'npoints', 'value': this.getValue()});
+                                    rpc.call("rpc_server_chart_set", {npoints: this.getValue()});
                                 },
                             },
                         },
@@ -113,10 +125,10 @@ export function getView() {
                             name:   "sfreq",
                             on: {
                                 onSliderDrag: function() {
-                                    rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
+                                    //rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
                                 },
                                 onChange:function(){
-                                    rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
+                                    //rpc.call("chartjs_set", {'cmd': 'fps', 'value': this.getValue()});
                                 },
                             },
                         },

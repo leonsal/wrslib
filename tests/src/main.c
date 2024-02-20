@@ -11,7 +11,13 @@
 extern const unsigned char gStaticfsZipData[];
 extern const unsigned int  gStaticfsZipSize;
 
-// Spplication state
+// Chart state
+typedef struct Chart {
+    int64_t freq;
+    int64_t npoints;
+} Chart;
+
+// Application state
 typedef struct AppState {
     Cli*            cli;
     Wrs*            wrs;
@@ -21,6 +27,7 @@ typedef struct AppState {
     bool            use_staticfs;       // Use external app file system for development
     _Atomic bool    run_server;
     size_t          test_bin_count;
+    Chart           chart;
     // queue           queue_chartjs;
     // pthread_t       thread_chartjs_id;
     // ThreadArg       thread_arg;
@@ -35,6 +42,8 @@ static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t size);
@@ -76,17 +85,24 @@ int main(int argc, const char* argv[]) {
         },
     };
 
-    // Creates server, rpc endpoints and bindings
+    // Creates server
     app.wrs = wrs_create(&cfg);
+
+    // Creates RPC 1
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc1, &app);
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
     CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
 
+    // Creates RPC 2
+    app.rpc2 = wrs_rpc_open(app.wrs, "/rpc2", 2, rpc_event);
+    wrs_rpc_set_userdata(app.rpc2, &app);
+    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_chart_set", rpc_server_chart_set));
+    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_chart_run", rpc_server_chart_run));
+
     // Blocks processing commands
     command_line_loop(&app);
-    //while (1) {sleep(1);}
 
     WRS_LOGI("Terminating...");
     wrs_logger_del_handler(&wrs_default_logger, log_console_handler);
@@ -340,6 +356,22 @@ static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
 
     return 0;
 }
+
+static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+
+    AppState* app = wrs_rpc_get_userdata(rpc);
+    cx_var_get_map_int(params, "freq", &app->chart.freq);
+    cx_var_get_map_int(params, "npoints", &app->chart.npoints);
+    WRS_LOGD("%s: freq:%ld, npoints:%ld", __func__, app->chart.freq, app->chart.npoints);
+    return 0;
+}
+
+static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+
+    AppState* app = wrs_rpc_get_userdata(rpc);
+    return 0;
+}
+
 
 static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
