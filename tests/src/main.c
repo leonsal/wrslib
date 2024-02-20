@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <math.h>
 #include <unistd.h>
 
 #include "cx_alloc.h"
@@ -15,6 +16,8 @@ extern const unsigned int  gStaticfsZipSize;
 typedef struct Chart {
     int64_t freq;
     int64_t npoints;
+    double  phase;
+    double  sample_rate;
 } Chart;
 
 // Application state
@@ -60,6 +63,9 @@ int main(int argc, const char* argv[]) {
     AppState app = {
         .server_port = 8888,
         .run_server = true,
+        .chart = {
+            .sample_rate = 44000,
+        },
     };
     app.cli = cli_create(cmds);
     parse_options(argc, argv, &app);
@@ -369,11 +375,30 @@ static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
 static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
     AppState* app = wrs_rpc_get_userdata(rpc);
-    WRS_LOGD("%s:", __func__);
+
+    // Creates response buffers and get address to its data
     CxVar* map = cx_var_set_map_map(resp, "data");
+    CxVar* signal = cx_var_set_map_buf(map, "signal", NULL, app->chart.npoints * sizeof(float));
+    CxVar* label  = cx_var_set_map_buf(map, "label", NULL, app->chart.npoints * sizeof(float));
+    float* signal_data;
+    size_t len;
+    cx_var_get_buf(signal, (void*)&signal_data, &len);
+    float* label_data;
+    cx_var_get_buf(label, (void*)&label_data, &len);
+
+    // Generates signal
+    const double delta = (double)app->chart.freq / app->chart.sample_rate;
+    for (size_t i = 0; i < app->chart.npoints; i++) {
+        signal_data[i] = sin(app->chart.phase);
+        label_data[i] = i;
+        app->chart.phase += delta;
+        if (app->chart.phase >= 2*M_PI) {
+            app->chart.phase = 2*M_PI-app->chart.phase;
+        }
+    }
+
     return 0;
 }
-
 
 static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 

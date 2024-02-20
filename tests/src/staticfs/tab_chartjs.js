@@ -1,14 +1,14 @@
 import * as App from "./app.js";
 import {RPC} from "./rpc.js";
 
-const VIEW_ID = "tab.chartjs";
 const RPC_URL = "/rpc2";
+const VIEW_ID = "tab.chartjs";
 const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
 const SLIDER_POINTS_ID = "tab.chartjs.slider.points";
 const SLIDER_FPS_ID = "tab.chartjs.slider.fps";
+const CHART_ID = "tab.chartjs.chart";
 
 const rpc = new RPC(RPC_URL);
-rpc.bind("updateChartJS", updateChartJS);
 
 let timeoutId = null;
 
@@ -17,6 +17,13 @@ function requestChart() {
     const fps = $$(SLIDER_FPS_ID).getValue();
     const delayMs = (1.0/fps) * 1000;
     rpc.call("rpc_server_chart_run", {}, (resp) => {
+  
+        const label = new Float32Array(resp.data.label);
+        const signal = new Float32Array(resp.data.signal);
+
+        $$(CHART_ID).chart.data.labels = Array.from(label);
+        $$(CHART_ID).chart.data.datasets[0].data = Array.from(signal);
+        $$(CHART_ID).chart.update();
 
         timeoutId = setTimeout(requestChart, delayMs);
     });
@@ -33,14 +40,6 @@ function rpcEvents(ev) {
         return;
     }
 }
-
-function updateChartJS(params) {
-
-    $$('chartjs1').chart.data.labels = params.labels;
-    $$('chartjs1').chart.data.datasets[0].data = params.data;
-    $$('chartjs1').chart.update();
-}
-
 
 
 // Returns this view
@@ -143,7 +142,7 @@ export function getView() {
                 // Chart
                 {
                     view: "chartjs",
-                    id:   "chartjs1",
+                    id:   CHART_ID,
 		            css:  {"background-color": "white"}, // canvas backgroud
                     // Start of Chart.js configuration
                     config: {
