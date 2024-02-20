@@ -13,6 +13,7 @@ const rpc = new RPC(RPC_URL);
 
 let timeoutId = null;
 let lastRequest = null;
+let lastFPS = null;
 
 function requestChart() {
 
@@ -31,11 +32,13 @@ function requestChart() {
         $$(CHART_ID).chart.update();
     });
 
-    if (timeoutId === null) {
-        const fps = $$(SLIDER_FPS_ID).getValue();
-        console.log("FPS----------->", fps);
+    // Changes update interval if FPS changed 
+    const fps = $$(SLIDER_FPS_ID).getValue();
+    if (timeoutId === null || fps != lastFPS) {
+        clearTimeout(timeoutId);
         const delayMs = (1.0 / fps) * 1000;
         timeoutId = setInterval(requestChart, delayMs);
+        lastFPS = fps;
     }
 }
 
@@ -47,11 +50,19 @@ function rpcEvents(ev) {
         const freq = $$(SLIDER_FREQ_ID).getValue();
         const noise=  $$(SLIDER_NOISE_ID).getValue();
         const npoints =  $$(SLIDER_POINTS_ID).getValue();
+        lastFPS = $$(SLIDER_FPS_ID).getValue();
         rpc.call("rpc_server_chart_set", {freq, noise, npoints});
 
-        // Starts requesting
+        // Starts chart request
         lastRequest = performance.now();
         requestChart();
+        return;
+    }
+
+    if (ev.type == RPC.EV_CLOSED) {
+        // Stops chart request
+        clearTimeout(timeoutId);
+        timeoutId = null;
         return;
     }
 }
@@ -67,7 +78,7 @@ export function getView() {
             id: VIEW_ID,
             on: {
                 onDestruct: function() {
-                    App.closeWebSocket(WSOCKET_URL);
+                    rpc.close();
                     App.setTabViewActive(VIEW_ID, false);
                 }
             },
@@ -88,8 +99,8 @@ export function getView() {
                                     return;
                                 }
                                 rpc.addEventListener(RPC.EV_OPENED, rpcEvents);
-                                rpc.addEventListener(RPC.EV_OPENED, rpcEvents);
-                                rpc.addEventListener(RPC.EV_OPENED, rpcEvents);
+                                rpc.addEventListener(RPC.EV_CLOSED, rpcEvents);
+                                rpc.addEventListener(RPC.EV_ERROR, rpcEvents);
                             },
                         },
                         {
@@ -98,8 +109,6 @@ export function getView() {
                             css:    "webix_primary",
                             autowidth:  true,
                             click: function() {
-                                clearTimeout(timeoutId);
-                                timeoutId = null;
                                 const emsg = rpc.close();
                                 if (emsg) {
                                     console.log(emsg);
@@ -170,22 +179,6 @@ export function getView() {
                             value:  '20',
                             min:    2,
                             max:    60,
-                            on: {
-                                onSliderDrag: function() {
-                                    if (timeoutId) {
-                                        clearTimeout(timeoutId);
-                                        timeoutId = null;
-                                        requestChart();
-                                    }
-                                },
-                                onChange:function(){
-                                    if (timeoutId) {
-                                        clearTimeout(timeoutId);
-                                        timeoutId = null;
-                                        requestChart();
-                                    }
-                                },
-                            },
                         },
                     ],
                 },

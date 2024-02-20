@@ -1,7 +1,7 @@
 import * as App from "./app.js";
 import {RPC} from "./rpc.js";
 import * as tabRPC from "./tab_rpc.js";
-import * as tabChartJS from "./tab_chartjs.js";
+import * as tabChartJS from "./tab_chart.js";
 
 // Associate menu ids with function with creates associated view
 const MENUID_RPC = "menu.rpc";
