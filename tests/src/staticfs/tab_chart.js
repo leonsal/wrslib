@@ -15,7 +15,123 @@ let timeoutId = null;
 let lastRequest = null;
 let lastFPS = null;
 
-function requestChart() {
+class AudioStream extends EventTarget {
+
+    constructor(bufSize=4410, minBufs=2) {
+
+        super();
+        this.#bufSize = bufSize;
+        this.#minBufs = minBufs;
+    }
+
+    open() {
+
+        this.#ctx = new AudioContext();
+    }
+
+    close() {
+
+        if (this.#ctx === null) {
+            return;
+        }
+        this.#ctx.close();
+        this.#ctx = null;
+    }
+
+    bufferSize() {
+
+        return this.#bufSize;
+    }
+
+    appendData(arrayf32) {
+
+        console.log("append", arrayf32.byteLength/4);
+        this.#bufList.push(arrayf32);
+        if (!this.#playing) {
+            this.start();
+        }
+    }
+
+    // Starts playing
+    start() {
+
+        if (this.#playing) {
+            console.log("start(): already playing");
+            return;
+        }
+
+        if (this.#bufList.length == 0) {
+            console.log("start(): request data");
+            const cev = new CustomEvent(AudioStream.EV_NEED_DATA, {
+                detail: {bufSize: this.#bufSize}
+            });
+            this.dispatchEvent(cev); 
+            return;
+        }
+
+        // Get next array from the list and create buffer
+        const buffer = this.#ctx.createBuffer(
+            1,                      // channels,
+            this.#bufSize,          // length
+            this.#ctx.sampleRate    // sample rate
+        );
+        console.log("buffer", buffer);
+        const bufData = this.#bufList.shift();
+        buffer.copyToChannel(bufData, 0);
+
+        // Creates audio buffer source and set the buffer as the source
+        const source = this.#ctx.createBufferSource();
+        source.buffer = buffer;
+
+        // Connects the buffer source to the destination
+        source.connect(this.#ctx.destination);
+
+        // Register handler to start playing again when current buffer ends.
+        source.addEventListener('ended', (_) => {
+            // Play next buffer 
+            this.#playing = false;
+            this.start();
+            // If number of available buffers less than minimum,
+            // requests more data.
+            if (this.#bufList.length <= this.#minBufs) {
+                const cev = new CustomEvent(AudioStream.EV_NEED_DATA, {
+                    detail: {bufSize: this.#bufSize}
+                });
+                this.dispatchEvent(cev); 
+            }
+        });
+
+        source.start();
+        console.log("buffer list", this.#bufList.length);
+        this.#playing = true;
+    }
+
+    // Stops playing
+    stop() {
+
+        this.#playing = false;
+        this.#bufList = [];
+    }
+
+    // Public static properties
+    static EV_NEED_DATA = "audiostream.need_data";
+
+    // Private instance properties
+    #bufSize    = 4410;
+    #minBufs    = 2;
+    #ctx        = null; // WebAudio context
+    #bufList    = [];   // Buffer list
+    #playing    = false;
+
+};
+
+let audio = new AudioStream(4410, 3);
+audio.addEventListener(AudioStream.EV_NEED_DATA, () => {
+    requestAudio();
+    requestAudio();
+});
+
+function requestAudio() {
 
     //console.log(`elapsed": ${(performance.now() - lastRequest).toFixed(2)}`);
     lastRequest = performance.now();
@@ -25,6 +141,7 @@ function requestChart() {
         // Get chart labels and signal
         const label = new Float32Array(resp.data.label);
         const signal = new Float32Array(resp.data.signal);
+        audio.appendData(signal);
 
         // Updates chart
         $$(CHART_ID).chart.data.labels = Array.from(label);
@@ -32,14 +149,14 @@ function requestChart() {
         $$(CHART_ID).chart.update();
     });
 
-    // Changes update interval if FPS changed 
-    const fps = $$(SLIDER_FPS_ID).getValue();
-    if (timeoutId === null || fps != lastFPS) {
-        clearTimeout(timeoutId);
-        const delayMs = (1.0 / fps) * 1000;
-        timeoutId = setInterval(requestChart, delayMs);
-        lastFPS = fps;
-    }
+    // // Changes update interval if FPS changed 
+    // const fps = $$(SLIDER_FPS_ID).getValue();
+    // if (timeoutId === null || fps != lastFPS) {
+    //     clearTimeout(timeoutId);
+    //     const delayMs = (1.0 / fps) * 1000;
+    //     timeoutId = setInterval(requestAudio, delayMs);
+    //     lastFPS = fps;
+    // }
 }
 
 function rpcEvents(ev) {
@@ -49,20 +166,23 @@ function rpcEvents(ev) {
         // Updates chart parameters
         const freq = $$(SLIDER_FREQ_ID).getValue();
         const noise=  $$(SLIDER_NOISE_ID).getValue();
-        const npoints =  $$(SLIDER_POINTS_ID).getValue();
+        const npoints =  audio.bufferSize();
         lastFPS = $$(SLIDER_FPS_ID).getValue();
         rpc.call("rpc_server_chart_set", {freq, noise, npoints});
 
-        // Starts chart request
-        lastRequest = performance.now();
-        requestChart();
+        audio.open();
+        audio.start();
+        // // Starts chart request
+        // lastRequest = performance.now();
+        // requestAudio();
         return;
     }
 
     if (ev.type == RPC.EV_CLOSED) {
-        // Stops chart request
-        clearTimeout(timeoutId);
-        timeoutId = null;
+        audio.stop();
+        // // Stops chart request
+        // clearTimeout(timeoutId);
+        // timeoutId = null;
         return;
     }
 }
