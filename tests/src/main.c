@@ -13,13 +13,14 @@ extern const unsigned char gStaticfsZipData[];
 extern const unsigned int  gStaticfsZipSize;
 
 // Chart state
-typedef struct Chart {
-    int64_t freq;
-    int64_t noise;
-    int64_t npoints;
+typedef struct Audio {
+    int64_t sample_rate;    // sample rate in Hz
+    int64_t gain;           // gain (0-100%)
+    int64_t freq;           // frequency Hz
+    int64_t noise;          // noise ampliture (0-100%)
+    int64_t nsamples;       // number of samples to generate
     double  phase;
-    double  sample_rate;
-} Chart;
+} Audio;
 
 // Application state
 typedef struct AppState {
@@ -31,11 +32,7 @@ typedef struct AppState {
     bool            use_staticfs;       // Use external app file system for development
     _Atomic bool    run_server;
     size_t          test_bin_count;
-    Chart           chart;
-    // queue           queue_chartjs;
-    // pthread_t       thread_chartjs_id;
-    // ThreadArg       thread_arg;
-    // _Atomic bool    run_server;
+    Audio           audio;
 } AppState;
 
 // Forward declarations
@@ -46,8 +43,8 @@ static void command_line_loop(AppState* app);
 static void rpc_event(WrsRpc* rpc, size_t connid, WrsEvent ev);
 static int rpc_server_text_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
-static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
-static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_audio_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
+static int rpc_server_audio_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int rpc_server_exit(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp);
 static int cmd_test_bin(Cli* cli, void* udata);
 static void call_test_bin(WrsRpc* rpc, size_t size);
@@ -64,9 +61,6 @@ int main(int argc, const char* argv[]) {
     AppState app = {
         .server_port = 8888,
         .run_server = true,
-        .chart = {
-            .sample_rate = 44000,
-        },
     };
     app.cli = cli_create(cmds);
     parse_options(argc, argv, &app);
@@ -105,8 +99,8 @@ int main(int argc, const char* argv[]) {
     // Creates RPC 2
     app.rpc2 = wrs_rpc_open(app.wrs, "/rpc2", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc2, &app);
-    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_chart_set", rpc_server_chart_set));
-    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_chart_run", rpc_server_chart_run));
+    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
+    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
 
     // Blocks processing commands
     command_line_loop(&app);
@@ -364,25 +358,27 @@ static int rpc_server_bin_msg(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* 
     return 0;
 }
 
-static int rpc_server_chart_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+static int rpc_server_audio_set(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
     AppState* app = wrs_rpc_get_userdata(rpc);
-    cx_var_get_map_int(params, "freq", &app->chart.freq);
-    cx_var_get_map_int(params, "noise", &app->chart.noise);
-    cx_var_get_map_int(params, "npoints", &app->chart.npoints);
-    WRS_LOGD("%s: freq:%ld, npoints:%ld", __func__, app->chart.freq, app->chart.npoints);
+    cx_var_get_map_int(params, "sample_rate", &app->audio.sample_rate);
+    cx_var_get_map_int(params, "nsamples", &app->audio.nsamples);
+    cx_var_get_map_int(params, "gain", &app->audio.gain);
+    cx_var_get_map_int(params, "freq", &app->audio.freq);
+    cx_var_get_map_int(params, "noise", &app->audio.noise);
+    WRS_LOGD("%s: freq:%ld, nsamples:%ld", __func__, app->audio.freq, app->audio.nsamples);
     return 0;
 }
 
-static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
+static int rpc_server_audio_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar* resp) {
 
     //WRS_LOGD("%s:", __func__);
     AppState* app = wrs_rpc_get_userdata(rpc);
 
     // Creates response buffers and get address to its data
     CxVar* map = cx_var_set_map_map(resp, "data");
-    CxVar* signal = cx_var_set_map_buf(map, "signal", NULL, app->chart.npoints * sizeof(float));
-    CxVar* label  = cx_var_set_map_buf(map, "label", NULL, app->chart.npoints * sizeof(float));
+    CxVar* signal = cx_var_set_map_buf(map, "signal", NULL, app->audio.nsamples * sizeof(float));
+    CxVar* label  = cx_var_set_map_buf(map, "label", NULL, app->audio.nsamples * sizeof(float));
     float* signal_data;
     size_t len;
     cx_var_get_buf(signal, (void*)&signal_data, &len);
@@ -390,15 +386,15 @@ static int rpc_server_chart_run(WrsRpc* rpc, size_t connid, CxVar* params, CxVar
     cx_var_get_buf(label, (void*)&label_data, &len);
 
     // Generates signal and labels
-    const double delta = (double)app->chart.freq / app->chart.sample_rate;
-    for (size_t i = 0; i < app->chart.npoints; i++) {
-        signal_data[i] = sin(app->chart.phase);
-        const float noise = (50-(rand() % 100)) * app->chart.noise / 20000.0;
+    const double delta = 2*M_PI * (double)app->audio.freq / (double)app->audio.sample_rate;
+    for (size_t i = 0; i < app->audio.nsamples; i++) {
+        signal_data[i] = ((double)app->audio.gain/100.0) * sin(app->audio.phase);
+        const float noise = (50-(rand() % 100)) * app->audio.noise / 20000.0;
         signal_data[i] += noise;
         label_data[i] = i;
-        app->chart.phase += delta;
-        if (app->chart.phase >= 2*M_PI) {
-            app->chart.phase = 2*M_PI-app->chart.phase;
+        app->audio.phase += delta;
+        if (app->audio.phase >= 2*M_PI) {
+            app->audio.phase = 2*M_PI-app->audio.phase;
         }
     }
 

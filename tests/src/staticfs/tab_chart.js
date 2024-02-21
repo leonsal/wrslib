@@ -3,9 +3,11 @@ import {RPC} from "./rpc.js";
 
 const RPC_URL = "/rpc2";
 const VIEW_ID = "tab.chartjs";
+const COMBO_BUFSIZE_ID = "tab.audio.combo.bsize";
+const COMBO_BUFCOUNT_ID = "tab.audio.combo.bcount";
+const SLIDER_GAIN_ID = "tab.chartjs.slider.gain";
 const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
-const SLIDER_NOISE_ID = "tab.chartjs.noise.freq";
-const SLIDER_POINTS_ID = "tab.chartjs.slider.points";
+const SLIDER_NOISE_ID = "tab.chartjs.slider.noise";
 const SLIDER_FPS_ID = "tab.chartjs.slider.fps";
 const CHART_ID = "tab.chartjs.chart";
 const SLIDER_WIDTH = 160;
@@ -17,15 +19,15 @@ let lastFPS = null;
 
 class AudioStream extends EventTarget {
 
-    constructor(bufSize=4410, minBufs=2) {
+    constructor() {
 
         super();
-        this.#bufSize = bufSize;
-        this.#minBufs = minBufs;
     }
 
-    open() {
+    open(bufSize=4410, minBufs=2) {
 
+        this.#bufSize = bufSize;
+        this.#minBufs = minBufs;
         this.#ctx = new AudioContext();
     }
 
@@ -38,8 +40,14 @@ class AudioStream extends EventTarget {
         this.#ctx = null;
     }
 
-    bufferSize() {
+    get sampleRate() {
+        if (this.#ctx === null) {
+            return null;
+        }
+        return this.#ctx.sampleRate;
+    }
 
+    get bufSize() {
         return this.#bufSize;
     }
 
@@ -120,13 +128,13 @@ class AudioStream extends EventTarget {
     #bufList    = [];       // List of buffers scheduled to play
     #minBufs    = 2;        // Minimum number of buffers to keep in the list of buffers
     #ctx        = null;     // WebAudio context
-    #playTime   = null;     // WebAudio play time time
+    #playTime   = null;     // WebAudio play time
 
 };
 
-let audio = new AudioStream(2205, 3);
+let audio = new AudioStream();
 audio.addEventListener(AudioStream.EV_NEED_DATA, (ev) => {
-    console.log("request audio bufCount:", ev.detail.bufCount);
+    //console.log("request audio bufCount:", ev.detail.bufCount);
     while (ev.detail.bufCount > 0) {
         requestAudio();
         ev.detail.bufCount--;
@@ -138,9 +146,9 @@ function requestAudio() {
     //console.log(`elapsed": ${(performance.now() - lastRequest).toFixed(2)}`);
     lastRequest = performance.now();
 
-    rpc.call("rpc_server_chart_run", {}, (resp) => {
+    rpc.call("rpc_server_audio_run", {}, (resp) => {
  
-        // Get chart labels and signal
+        // Get audio labels and signal
         const label = new Float32Array(resp.data.label);
         const signal = new Float32Array(resp.data.signal);
         audio.appendData(signal);
@@ -156,26 +164,26 @@ function rpcEvents(ev) {
 
     if (ev.type == RPC.EV_OPENED) {
 
-        // Updates chart parameters
+        const nsamples = parseInt($$(COMBO_BUFSIZE_ID).getValue());
+        const bufCount = parseInt($$(COMBO_BUFCOUNT_ID).getValue());
+        console.log(nsamples, bufCount);
+        audio.open(nsamples, bufCount);
+
+        // Updates audio parameters
+        const sample_rate = audio.sampleRate;
+        //const nsamples =  audio.bufSize;
+        const gain = $$(SLIDER_GAIN_ID).getValue();
         const freq = $$(SLIDER_FREQ_ID).getValue();
         const noise=  $$(SLIDER_NOISE_ID).getValue();
-        const npoints =  audio.bufferSize();
-        lastFPS = $$(SLIDER_FPS_ID).getValue();
-        rpc.call("rpc_server_chart_set", {freq, noise, npoints});
+        rpc.call("rpc_server_audio_set", {sample_rate, nsamples, gain, freq, noise});
 
-        audio.open();
         audio.start();
-        // // Starts chart request
-        // lastRequest = performance.now();
-        // requestAudio();
         return;
     }
 
     if (ev.type == RPC.EV_CLOSED) {
         audio.stop();
-        // // Stops chart request
-        // clearTimeout(timeoutId);
-        // timeoutId = null;
+        audio.close();
         return;
     }
 }
@@ -214,6 +222,8 @@ export function getView() {
                                 rpc.addEventListener(RPC.EV_OPENED, rpcEvents);
                                 rpc.addEventListener(RPC.EV_CLOSED, rpcEvents);
                                 rpc.addEventListener(RPC.EV_ERROR, rpcEvents);
+                                $$(COMBO_BUFSIZE_ID).disable();
+                                $$(COMBO_BUFCOUNT_ID).disable();
                             },
                         },
                         {
@@ -223,10 +233,48 @@ export function getView() {
                             autowidth:  true,
                             click: function() {
                                 const emsg = rpc.close();
+                                $$(COMBO_BUFSIZE_ID).enable();
+                                $$(COMBO_BUFCOUNT_ID).enable();
                                 if (emsg) {
                                     console.log(emsg);
                                     return;
                                 }
+                            },
+                        },
+                        {
+                            view:   "combo",
+                            id:     COMBO_BUFSIZE_ID,
+                            width:  200,
+                            label:  "buffer size:",
+                            value:  '512',
+                            options: ['256','512','1024','2048','4096'],
+                        },
+                        {
+                            view:       "combo",
+                            id:         COMBO_BUFCOUNT_ID,
+                            width:      200,
+                            labelAlign: "right",
+                            labelWidth: 100,
+                            label:      "buffer count:",
+                            value:      '3',
+                            options:    ['2','3','4','5','6'],
+                        },
+                        {
+                            view:   "slider",
+                            id:     SLIDER_GAIN_ID,
+                            width:  SLIDER_WIDTH,
+                            title:  webix.template("gain: #value#%"),
+                            moveTitle: false,
+                            value:  '50',
+                            min:    0,
+                            max:    100,
+                            on: {
+                                onSliderDrag: function() {
+                                    rpc.call("rpc_server_audio_set", {gain: this.getValue()});
+                                },
+                                onChange:function(){
+                                    rpc.call("rpc_server_audio_set", {gain: this.getValue()});
+                                },
                             },
                         },
                         {
@@ -235,15 +283,15 @@ export function getView() {
                             width:  SLIDER_WIDTH,
                             title:  webix.template("freq: #value#Hz"),
                             moveTitle: false,
-                            value:  '300',
-                            min:    10,
+                            value:  '100',
+                            min:    100,
                             max:    8000,
                             on: {
                                 onSliderDrag: function() {
-                                    rpc.call("rpc_server_chart_set", {freq: this.getValue()});
+                                    rpc.call("rpc_server_audio_set", {freq: this.getValue()});
                                 },
                                 onChange:function(){
-                                    rpc.call("rpc_server_chart_set", {freq: this.getValue()});
+                                    rpc.call("rpc_server_audio_set", {freq: this.getValue()});
                                 },
                             },
                         },
@@ -258,41 +306,23 @@ export function getView() {
                             max:    50,
                             on: {
                                 onSliderDrag: function() {
-                                    rpc.call("rpc_server_chart_set", {noise: this.getValue()});
+                                    rpc.call("rpc_server_audio_set", {noise: this.getValue()});
                                 },
                                 onChange:function(){
-                                    rpc.call("rpc_server_chart_set", {noise: this.getValue()});
+                                    rpc.call("rpc_server_audio_set", {noise: this.getValue()});
                                 },
                             },
                         },
-                        {
-                            view:   "slider",
-                            id:     SLIDER_POINTS_ID,
-                            width:  SLIDER_WIDTH,
-                            title:  webix.template("npoints: #value#"),
-                            moveTitle: false,
-                            value:  '1024',
-                            min:    16,
-                            max:    2048,
-                            on: {
-                                onSliderDrag: function() {
-                                    rpc.call("rpc_server_chart_set", {npoints: this.getValue()});
-                                },
-                                onChange:function(){
-                                    rpc.call("rpc_server_chart_set", {npoints: this.getValue()});
-                                },
-                            },
-                        },
-                        {
-                            view:   "slider",
-                            id:     SLIDER_FPS_ID,
-                            width:  SLIDER_WIDTH,
-                            title:  webix.template("fps: #value#"),
-                            moveTitle: false,
-                            value:  '20',
-                            min:    2,
-                            max:    60,
-                        },
+                        // {
+                        //     view:   "slider",
+                        //     id:     SLIDER_FPS_ID,
+                        //     width:  SLIDER_WIDTH,
+                        //     title:  webix.template("fps: #value#"),
+                        //     moveTitle: false,
+                        //     value:  '20',
+                        //     min:    2,
+                        //     max:    60,
+                        // },
                     ],
                 },
                 // Chart
@@ -321,7 +351,7 @@ export function getView() {
                             plugins: {
                                 title: {
                                     display: true,
-                                    text:    "Chart1 title",
+                                    text:    "Signal",
                                 },
                             },
                             legend: {
