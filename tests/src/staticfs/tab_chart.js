@@ -45,90 +45,92 @@ class AudioStream extends EventTarget {
 
     appendData(arrayf32) {
 
-        console.log("append", arrayf32.byteLength/4);
-        this.#bufList.push(arrayf32);
-        if (!this.#playing) {
-            this.start();
-        }
-    }
-
-    // Starts playing
-    start() {
-
-        if (this.#playing) {
-            console.log("start(): already playing");
-            return;
+        if (arrayf32.length != this.#bufSize) {
+            throw new Error('appendData() requires Float32Typed array with correct size');
         }
 
-        if (this.#bufList.length == 0) {
-            console.log("start(): request data");
-            const cev = new CustomEvent(AudioStream.EV_NEED_DATA, {
-                detail: {bufSize: this.#bufSize}
-            });
-            this.dispatchEvent(cev); 
-            return;
+        if (this.#playTime === null) {
+            this.#playTime = this.#ctx.currentTime;
         }
 
-        // Get next array from the list and create buffer
+        // Creates buffer and copy data to buffer channel
         const buffer = this.#ctx.createBuffer(
             1,                      // channels,
             this.#bufSize,          // length
             this.#ctx.sampleRate    // sample rate
         );
-        console.log("buffer", buffer);
-        const bufData = this.#bufList.shift();
-        buffer.copyToChannel(bufData, 0);
+        buffer.copyToChannel(arrayf32, 0);
 
         // Creates audio buffer source and set the buffer as the source
         const source = this.#ctx.createBufferSource();
         source.buffer = buffer;
-
-        // Connects the buffer source to the destination
+        this.#bufList.push(source);
+   
+        // Schedule the time for this source to start to play
         source.connect(this.#ctx.destination);
+        source.start(this.#playTime);
+        this.#playTime += buffer.duration;
 
-        // Register handler to start playing again when current buffer ends.
+        // Sets handler to process when current buffer has ended playing.
         source.addEventListener('ended', (_) => {
-            // Play next buffer 
-            this.#playing = false;
-            this.start();
-            // If number of available buffers less than minimum,
-            // requests more data.
-            if (this.#bufList.length <= this.#minBufs) {
+            // Remove buffer from list
+            this.#bufList.shift();
+            // Request more data if necessary
+            const bufCount = this.#bufList.length;
+            if (bufCount == 0) {
+                this.#playTime = null;
+            }
+            if (bufCount < this.#minBufs) {
                 const cev = new CustomEvent(AudioStream.EV_NEED_DATA, {
-                    detail: {bufSize: this.#bufSize}
+                    detail: {bufCount: this.#minBufs - bufCount}
                 });
                 this.dispatchEvent(cev); 
             }
         });
+    }
 
-        source.start();
-        console.log("buffer list", this.#bufList.length);
-        this.#playing = true;
+    // Starts playing
+    start() {
+
+        if (this.#playTime != null) {
+            console.log("start(): already playing");
+            return;
+        }
+        // Dispatch event to request audio data
+        const cev = new CustomEvent(AudioStream.EV_NEED_DATA, {detail: {bufCount: this.#minBufs}});
+        this.dispatchEvent(cev); 
     }
 
     // Stops playing
     stop() {
 
-        this.#playing = false;
+        // Stops all enqueued buffers
+        for (let i = 0; i < this.#bufList.length; i++) {
+            this.#bufList[i].stop();
+        }
         this.#bufList = [];
+        this.#playTime = null;
     }
 
     // Public static properties
     static EV_NEED_DATA = "audiostream.need_data";
 
     // Private instance properties
-    #bufSize    = 4410;
-    #minBufs    = 2;
-    #ctx        = null; // WebAudio context
-    #bufList    = [];   // Buffer list
-    #playing    = false;
+    #bufSize    = 4410;     // Buffer size in number of float32 samples
+    #bufList    = [];       // List of buffers scheduled to play
+    #minBufs    = 2;        // Minimum number of buffers to keep in the list of buffers
+    #ctx        = null;     // WebAudio context
+    #playTime   = null;     // WebAudio play time time
 
 };
 
-let audio = new AudioStream(4410, 3);
-audio.addEventListener(AudioStream.EV_NEED_DATA, () => {
-    requestAudio();
-    requestAudio();
+let audio = new AudioStream(2205, 3);
+audio.addEventListener(AudioStream.EV_NEED_DATA, (ev) => {
+    console.log("request audio bufCount:", ev.detail.bufCount);
+    while (ev.detail.bufCount > 0) {
+        requestAudio();
+        ev.detail.bufCount--;
+    }
 });
 
 function requestAudio() {
@@ -148,15 +150,6 @@ function requestAudio() {
         $$(CHART_ID).chart.data.datasets[0].data = Array.from(signal);
         $$(CHART_ID).chart.update();
     });
-
-    // // Changes update interval if FPS changed 
-    // const fps = $$(SLIDER_FPS_ID).getValue();
-    // if (timeoutId === null || fps != lastFPS) {
-    //     clearTimeout(timeoutId);
-    //     const delayMs = (1.0 / fps) * 1000;
-    //     timeoutId = setInterval(requestAudio, delayMs);
-    //     lastFPS = fps;
-    // }
 }
 
 function rpcEvents(ev) {
