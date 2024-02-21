@@ -1,14 +1,14 @@
 import * as App from "./app.js";
 import {RPC} from "./rpc.js";
 import * as tabRPC from "./tab_rpc.js";
-import * as tabChartJS from "./tab_chart.js";
+import * as tabAudio from "./tab_audio.js";
 
 // Associate menu ids with function with creates associated view
 const MENUID_RPC = "menu.rpc";
-const MENUID_CHART = "menu.chartjs";
+const MENUID_AUDIO = "menu.audio";
 const MENUID_EXIT = "menu.exit";
 App.setTabViewFunc(MENUID_RPC, tabRPC.getView);
-App.setTabViewFunc(MENUID_CHART, tabChartJS.getView);
+App.setTabViewFunc(MENUID_AUDIO, tabAudio.getView);
 
 const mainMenu = {
     view: "menu",
@@ -19,7 +19,7 @@ const mainMenu = {
             value: "Tests",
             submenu: [
                 {id: MENUID_RPC, value: "RPC"},
-                {id: MENUID_CHART, value: "Chart"},
+                {id: MENUID_AUDIO, value: "Audio"},
                 {$template: "Separator"},
                 {id: MENUID_EXIT, value: "Exit"},
             ]
