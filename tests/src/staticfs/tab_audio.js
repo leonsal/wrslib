@@ -5,17 +5,14 @@ const RPC_URL = "/rpc2";
 const VIEW_ID = "tab.chartjs";
 const COMBO_BUFSIZE_ID = "tab.audio.combo.bsize";
 const COMBO_BUFCOUNT_ID = "tab.audio.combo.bcount";
-const SLIDER_GAIN_ID = "tab.chartjs.slider.gain";
-const SLIDER_FREQ_ID = "tab.chartjs.slider.freq";
-const SLIDER_NOISE_ID = "tab.chartjs.slider.noise";
-const SLIDER_FPS_ID = "tab.chartjs.slider.fps";
-const CHART_ID = "tab.chartjs.chart";
+const SLIDER_GAIN_ID = "tab.audio.slider.gain";
+const SLIDER_FREQ_ID = "tab.audio.slider.freq";
+const SLIDER_NOISE_ID = "tab.audio.slider.noise";
+const SLIDER_FPS_ID = "tab.audio.slider.fps";
+const CHART_ID = "tab.audio.chart";
 const SLIDER_WIDTH = 160;
 const rpc = new RPC(RPC_URL);
 
-let timeoutId = null;
-let lastRequest = null;
-let lastFPS = null;
 
 class AudioStream extends EventTarget {
 
@@ -141,22 +138,58 @@ audio.addEventListener(AudioStream.EV_NEED_DATA, (ev) => {
     }
 });
 
-function requestAudio() {
+let chartUpdate = false;
+let chartLastUpdate = null;
+let lastLabels = null;
+let lastSignal = null;
 
-    //console.log(`elapsed": ${(performance.now() - lastRequest).toFixed(2)}`);
-    lastRequest = performance.now();
+function updateChart() {
+
+    if (!chartUpdate || !lastLabels) {
+        return;
+    }
+
+    // Calculates rate from fps and checks for elapsed time
+    const fps = parseInt($$(SLIDER_FPS_ID).getValue());
+    const rateMS = (1.0/fps) * 1000.0;
+    const elapsed = performance.now() - chartLastUpdate;
+    if (elapsed < rateMS) {
+        return;
+    }
+    //console.log(`elapsed: ${elapsed.toFixed(2)}`);
+
+    // Updates the chart
+    $$(CHART_ID).chart.data.labels = Array.from(lastLabels);
+    $$(CHART_ID).chart.data.datasets[0].data = Array.from(lastSignal);
+    $$(CHART_ID).chart.update();
+
+    chartLastUpdate = performance.now();
+    requestAnimationFrame(updateChart);
+}
+
+function startUpdateChart() {
+
+    chartUpdate = true;
+    chartLastUpdate = performance.now()
+    requestAnimationFrame(updateChart);
+}
+
+function stopUpdateChart() {
+
+    chartUpdate = false;
+}
+
+
+function requestAudio() {
 
     rpc.call("rpc_server_audio_run", {}, (resp) => {
  
         // Get audio labels and signal
-        const label = new Float32Array(resp.data.label);
-        const signal = new Float32Array(resp.data.signal);
-        audio.appendData(signal);
+        lastLabels = new Float32Array(resp.data.label);
+        lastSignal = new Float32Array(resp.data.signal);
+        audio.appendData(lastSignal);
 
-        // Updates chart
-        $$(CHART_ID).chart.data.labels = Array.from(label);
-        $$(CHART_ID).chart.data.datasets[0].data = Array.from(signal);
-        $$(CHART_ID).chart.update();
+        updateChart();
     });
 }
 
@@ -164,24 +197,23 @@ function rpcEvents(ev) {
 
     if (ev.type == RPC.EV_OPENED) {
 
+        // Updates audio parameters
         const nsamples = parseInt($$(COMBO_BUFSIZE_ID).getValue());
         const bufCount = parseInt($$(COMBO_BUFCOUNT_ID).getValue());
-        console.log(nsamples, bufCount);
         audio.open(nsamples, bufCount);
-
-        // Updates audio parameters
         const sample_rate = audio.sampleRate;
-        //const nsamples =  audio.bufSize;
         const gain = $$(SLIDER_GAIN_ID).getValue();
         const freq = $$(SLIDER_FREQ_ID).getValue();
         const noise=  $$(SLIDER_NOISE_ID).getValue();
         rpc.call("rpc_server_audio_set", {sample_rate, nsamples, gain, freq, noise});
 
         audio.start();
+        startUpdateChart();
         return;
     }
 
     if (ev.type == RPC.EV_CLOSED) {
+        stopUpdateChart();
         audio.stop();
         audio.close();
         return;
@@ -193,7 +225,7 @@ function rpcEvents(ev) {
 export function getView() {
 
     const tabView = {
-        header: "Chart",
+        header: "Audio",
         close: true,
         body: {
             id: VIEW_ID,
@@ -265,7 +297,7 @@ export function getView() {
                             width:  SLIDER_WIDTH,
                             title:  webix.template("gain: #value#%"),
                             moveTitle: false,
-                            value:  '50',
+                            value:  '20',
                             min:    0,
                             max:    100,
                             on: {
@@ -313,16 +345,16 @@ export function getView() {
                                 },
                             },
                         },
-                        // {
-                        //     view:   "slider",
-                        //     id:     SLIDER_FPS_ID,
-                        //     width:  SLIDER_WIDTH,
-                        //     title:  webix.template("fps: #value#"),
-                        //     moveTitle: false,
-                        //     value:  '20',
-                        //     min:    2,
-                        //     max:    60,
-                        // },
+                        {
+                            view:   "slider",
+                            id:     SLIDER_FPS_ID,
+                            width:  SLIDER_WIDTH,
+                            title:  webix.template("fps: #value#"),
+                            moveTitle: false,
+                            value:  '20',
+                            min:    1,
+                            max:    60,
+                        },
                     ],
                 },
                 // Chart
@@ -334,11 +366,11 @@ export function getView() {
                     config: {
 			            type: "line",
 			            data: {
-				            labels: ['1','2','3','4','5'],
+				            labels: ['0','1'],
 				            datasets: [
                                 {
                                     label: "signal",
-                                    data:  [1,2,3,4,5],
+                                    data:  [0,0],
                                     borderColor: "blue",
                                     borderWidth: 1,
                                     pointRadius: 0,
