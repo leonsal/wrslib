@@ -30,6 +30,7 @@ typedef struct AppState {
     WrsRpc*         rpc2;
     int             server_port;        // HTTP server listening port
     bool            use_staticfs;       // Use external app file system for development
+    bool            start_browser;   
     _Atomic bool    run_server;
     size_t          test_bin_count;
     Audio           audio;
@@ -85,6 +86,9 @@ int main(int argc, const char* argv[]) {
             .cmd_line = {"google-chrome --app="},
         },
     };
+    if (app.start_browser) {
+        cfg.browser.start = true;
+    }
 
     // Creates server
     app.wrs = wrs_create(&cfg);
@@ -150,6 +154,7 @@ static int parse_options(int argc, const char* argv[], AppState* apps) {
         OPT_HELP(),
         OPT_INTEGER('p', "port", &apps->server_port, "HTTP Server listening port", NULL, 0, 0),
         OPT_BOOLEAN('s', "staticfs", &apps->use_staticfs, "Use internal static filesystem", NULL, 0, 0),
+        OPT_BOOLEAN('b', "browser", &apps->start_browser, "Starts default browser", NULL, 0, 0),
         OPT_END(),
     };
     struct argparse argparse;

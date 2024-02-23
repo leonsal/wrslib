@@ -4,7 +4,7 @@
 
 # Use this character to start a rule recipe
 .RECIPEPREFIX = >
-CLEANFILES=model
+CLEANFILES=tests
 
 # Sets compiler option
 CC=-DCMAKE_C_COMPILER=gcc
