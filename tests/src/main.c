@@ -6,6 +6,7 @@
 
 #include "argparse.h"
 #include "cli.h"
+//#include "webkit.h"
 #include "wrs.h"
 
 // Static filesystem symbols
@@ -30,6 +31,7 @@ typedef struct AppState {
     WrsRpc*         rpc2;
     int             server_port;        // HTTP server listening port
     bool            use_staticfs;       // Use external app file system for development
+    bool            webkit;             // Uses internal webkit gtk view
     bool            start_browser;   
     _Atomic bool    run_server;
     size_t          test_bin_count;
@@ -86,6 +88,7 @@ int main(int argc, const char* argv[]) {
             .cmd_line = {"google-chrome --app="},
         },
     };
+
     if (app.start_browser) {
         cfg.browser.start = true;
     }
@@ -106,8 +109,12 @@ int main(int argc, const char* argv[]) {
     CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
     CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
 
-    // Blocks processing commands
-    command_line_loop(&app);
+    // if (app.webkit) {
+    //     webkit_start(argc, (char**)argv, "http://localhost:8888");
+    // } else {
+        // Blocks processing commands
+        command_line_loop(&app);
+    //}
 
     WRS_LOGI("Terminating...");
     wrs_logger_del_handler(&wrs_default_logger, log_console_handler);
@@ -154,6 +161,7 @@ static int parse_options(int argc, const char* argv[], AppState* apps) {
         OPT_HELP(),
         OPT_INTEGER('p', "port", &apps->server_port, "HTTP Server listening port", NULL, 0, 0),
         OPT_BOOLEAN('s', "staticfs", &apps->use_staticfs, "Use internal static filesystem", NULL, 0, 0),
+        OPT_BOOLEAN('w', "webview", &apps->webkit, "Uses internal Webkit GTK view", NULL, 0, 0),
         OPT_BOOLEAN('b', "browser", &apps->start_browser, "Starts default browser", NULL, 0, 0),
         OPT_END(),
     };
