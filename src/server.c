@@ -101,7 +101,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
     }
 
     // Creates timer manager
-    wrs->tm = cx_timer_create(cxDefaultAllocator());
+    wrs->tm = cx_timer_create(cx_def_allocator());
     if (wrs->tm == NULL) {
         WRS_LOGE("%s: error from cx_timer_create()", __func__);
         return NULL;

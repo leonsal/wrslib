@@ -217,7 +217,7 @@ CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid) {
         goto exit;
     }
 
-    params = cx_var_new(cxDefaultAllocator());
+    params = cx_var_new(cx_def_allocator());
 
 exit:
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
@@ -325,9 +325,9 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
     RpcClient new_client = {
         .conn = (struct mg_connection*)conn,
         .opcode = -1,
-        .rxbytes = arru8_init(cxDefaultAllocator()),
-        .dec = wrs_decoder_new(cxDefaultAllocator()),
-        .enc = wrs_encoder_new(cxDefaultAllocator()),
+        .rxbytes = arru8_init(cx_def_allocator()),
+        .dec = wrs_decoder_new(cx_def_allocator()),
+        .enc = wrs_encoder_new(cx_def_allocator()),
         .rxalloc = cx_pool_allocator_create(4*4096, NULL),
         .txalloc = cx_pool_allocator_create(4*4096, NULL),
         .cid = 100,

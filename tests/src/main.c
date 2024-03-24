@@ -441,7 +441,7 @@ static void call_test_bin(WrsRpc* rpc, size_t size) {
 
     // Create parameters with non-initialized buffers
     // NOTE: params will be deallocated by wrs_rpc_call()
-    CxVar* params = cx_var_new(cxDefaultAllocator());
+    CxVar* params = cx_var_new(cx_def_allocator());
     cx_var_set_map(params);
     cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
     cx_var_set_map_buf(params, "f32", NULL, size * sizeof(float));
