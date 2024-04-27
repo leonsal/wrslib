@@ -71,7 +71,7 @@ int main(int argc, const char* argv[]) {
     // Initializes WRC logger using special console handler
     // which prints safely above command line being edited
     wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
-    wrs_logger_add_handler(&wrs_default_logger, log_console_handler, &app, CX_LOG_DEBUG);
+    wrs_logger_add_handler(&wrs_default_logger, log_console_handler, &app);
     WRS_LOGD("WRT tests");
 
     // Sets server config
