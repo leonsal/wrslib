@@ -99,15 +99,15 @@ int main(int argc, const char* argv[]) {
     // Creates RPC 1
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc1, &app);
-    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
-    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
-    CHKF(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
+    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
+    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
+    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
 
     // Creates RPC 2
     app.rpc2 = wrs_rpc_open(app.wrs, "/rpc2", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc2, &app);
-    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
-    CHKF(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
+    CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
+    CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
 
     // if (app.webkit) {
     //     webkit_start(argc, (char**)argv, "http://localhost:8888");
@@ -465,8 +465,8 @@ static void call_test_bin(WrsRpc* rpc, size_t size) {
          arrf64[i] = i*3;
     }
 
-    int res = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
-    if (res) {
+    CxError err = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
+    if (err.code) {
         WRS_LOGE("%s: error from wrs_rpc_call()", __func__);
         return;
     }

@@ -127,7 +127,7 @@ void wrs_encoder_clear(WrsEncoder* e) {
     cxarr_buf_clear(&e->buffers);
 }
 
-int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
+CxError wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
 
     // Clear the internal buffers
     cxarr_u8_clear(&e->encoded);
@@ -144,7 +144,7 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
     CxWriter writer = {.ctx = e, .write = (CxWriterWrite)enc_writer};
     int res = cx_json_build(msg, &cfg, &writer); 
     if (res) {
-        return res;
+        return CXERROR(1, "message");
     }
 
     // Sets the msg size in the first chunk and adds padding
@@ -171,7 +171,7 @@ int wrs_encoder_enc(WrsEncoder* e, CxVar* msg) {
         cx_alloc_free(e->alloc, buf->data, buf->len);
     }
 
-    return 0;
+    return CXERROR_OK();
 }
 
 void* wrs_encoder_get_msg(WrsEncoder* e, bool* text, size_t* len) {
@@ -232,7 +232,7 @@ void wrs_decoder_clear(WrsDecoder* d) {
     cxarr_var_clear(&d->vars);
 }
 
-int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg) {
+CxError wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg) {
 
     // Sets the configuration for JSON parser
     CxJsonParseCfg cfg = {
@@ -256,7 +256,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
     while (curr < last) {
         // Checks available size for chunk header
         if (curr + sizeof(uint32_t)*2 > last) {
-            return 1;
+            return CXERROR(1, "chunk size size exceeded");
         }
 
         // Get the chunk type and length in bytes
@@ -267,7 +267,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
 
         // Checks available size for chunk data
         if (curr + chunk_len > last) {
-            return 1;
+            return CXERROR(2, "chunk size size exceeded");
         }
 
         // Checks for JSON chunk
@@ -275,12 +275,9 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
             // Checks if JSON already decoded.
             // Only one JSON chunk is allowed.
             if (json) {
-                return 1;
+                return CXERROR(3, "more than 1 JSON chunk found");
             }
-            int res =cx_json_parse(curr, chunk_len, msg, &cfg);
-            if (res) {
-                return res;
-            }
+            CXERROR_RET(cx_json_parse(curr, chunk_len, msg, &cfg));
         // Checks for Buffer chunk
         } else if (chunk_type == WrsChunkBuf) {
             cxarr_buf_push(&d->buffers, (BufInfo){
@@ -289,7 +286,7 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
             });
         // Invalid chunk type
         } else {
-            return 1;
+            return CXERROR(4, "invalid chunk type");
         }
 
         // Advance pointer to start of next possible chunk
@@ -299,19 +296,19 @@ int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg
    
     // Checks for exact length of binary message
     if (curr != last) {
-        return 1;
+        return CXERROR(4, "invalid message length");
     }
 
     // Converts decoded string CxVars to corresponding buffers
     if (cxarr_var_len(&d->vars) != cxarr_buf_len(&d->buffers)) {
-        return 1;
+        return CXERROR(5, "error converting buffers");
     }
     for (size_t i = 0; i < cxarr_var_len(&d->vars); i++) {
         BufInfo* buf = &d->buffers.data[i];
         cx_var_set_buf(d->vars.data[i], (void*)buf->data, buf->len);
     }
 
-    return 0;
+    return CXERROR_OK();
 }
 
 

@@ -166,15 +166,15 @@ void* wrs_rpc_get_userdata(WrsRpc* rpc) {
     return rpc->userdata;
 }
 
-int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
+CxError wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
 
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
-    int res = 0;
+    CxError err = {};
 
     // Checks if there is already an association in this handler with the specified remote name
     BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind) {
-        res = 1;
+        err = CXERROR(1, "binding already exists");
         goto exit;
     }
 
@@ -184,18 +184,18 @@ int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
 
 exit:
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-    return res;
+    return err;
 }
 
-int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
+CxError wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
 
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
-    int res = 0;
+    CxError err = {};
 
     // Checks if there is already an association in this RPC endpoint with the specified remote name
     BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind == NULL) {
-        res = 1;
+        err = CXERROR(1, "binding not found");
         goto exit;
     }
 
@@ -203,7 +203,7 @@ int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
 
 exit:
     assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-    return res;
+    return err;
 }
 
 CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid) {
@@ -224,9 +224,8 @@ exit:
     return params;
 }
 
-int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb) {
+CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb) {
 
-    int res = 0;
     assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
 
     // Checks if this connection id is valid
@@ -234,7 +233,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
         assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
         cx_var_del(params);
-        return 1;
+        return CXERROR(1, "invalid connection id");
     }
 
     // Get the RPC client associated with this connection id and checks if it is active.
@@ -243,7 +242,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     if (client->conn == NULL) {
         WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
         cx_var_del(params);
-        return 1;
+        return CXERROR(2, "connection id is closed");
     }
   
     // Sets the message envelope
@@ -256,12 +255,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
     client->cid++;
 
     // Encodes message
-    res = wrs_encoder_enc(client->enc, msg);
-    cx_var_del(msg);
-    if (res) {
-        WRS_LOGE("%s: error encoding message", __func__);
-        return 1;
-    }
+    CXERROR_RET(wrs_encoder_enc(client->enc, msg));
 
     // Get encoded message type and buffer
     bool text;
@@ -271,11 +265,11 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
 
     // Sends message to remote client
     mg_lock_connection((struct mg_connection*)client->conn);
-    res = mg_websocket_write((struct mg_connection*)client->conn, opcode, encoded, len);
+    int res = mg_websocket_write((struct mg_connection*)client->conn, opcode, encoded, len);
     mg_unlock_connection((struct mg_connection*)client->conn);
     if (res <= 0) {
         WRS_LOGE("%s: error:%d writing websocket message", __func__, res);
-        return 1;
+        return CXERROR(3, "error to writing websocket");
     }
 
     // If callback supplied, saves information to map response to the callback
@@ -285,8 +279,7 @@ int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* par
         map_resp_set(&client->responses, cid, rinfo);
         //WRS_LOGD("%s: map_resp_len:%zu", __func__, map_resp_count(&client->responses));
     }
-
-    return 0;  
+    return CXERROR_OK();
 }
 
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
@@ -438,15 +431,15 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 
     // Decodes message and closes connection if invalid
     CxVar* rxmsg = cx_var_new(cx_pool_allocator_iface(client->rxalloc));
-    int res = wrs_decoder_dec(client->dec, text, msg_data, msg_len, rxmsg);
-    if (res) {
+    CxError err = wrs_decoder_dec(client->dec, text, msg_data, msg_len, rxmsg);
+    if (err.code) {
         cx_pool_allocator_clear(client->rxalloc);
         WRS_LOGE("%s: error decoding message", __func__);
         return 1; // DO NOT CLOSE
     }
 
     // Try to process this message as remote call
-    res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
+    int res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
     if (res == 0) {
         cx_pool_allocator_clear(client->rxalloc);
         return 1;
@@ -519,9 +512,9 @@ static int wrs_rpc_call_handler(WrsRpc* rpc, RpcClient* client, size_t connid, c
     }
 
     // Encodes message
-    res = wrs_encoder_enc(client->enc, txmsg);
+    CxError err = wrs_encoder_enc(client->enc, txmsg);
     cx_pool_allocator_clear(client->txalloc);
-    if (res) {
+    if (err.code) {
         WRS_LOGE("%s: error encoding message", __func__);
         return 0;
     }

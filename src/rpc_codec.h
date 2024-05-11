@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 
+#include "cx_error.h"
 #include "cx_alloc.h"
 #include "cx_var.h"
 
@@ -24,8 +25,8 @@ void wrs_encoder_del(WrsEncoder*);
 // Clear message encoder internal buffers, without deallocating memory
 void wrs_encoder_clear(WrsEncoder* e);
 
-// Encodes message into internal buffer and returns non-zero error.
-int wrs_encoder_enc(WrsEncoder* e, CxVar* msg);
+// Encodes message into internal buffer
+CxError wrs_encoder_enc(WrsEncoder* e, CxVar* msg);
 
 // Get the type, pointer and length of last message encoded buffer.
 void* wrs_encoder_get_msg(WrsEncoder* e, bool* text, size_t* len);
@@ -45,8 +46,7 @@ void wrs_decoder_del(WrsDecoder* d);
 void wrs_decoder_clear(WrsDecoder* e);
 
 // Decodes message text or binary message
-// Returns non zero error code on error.
-int wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
+CxError wrs_decoder_dec(WrsDecoder* d, bool text, void* data, size_t len, CxVar* msg);
 
 
 #endif

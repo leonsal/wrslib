@@ -19,6 +19,7 @@ extern wrs_logger wrs_default_logger;
 #define WRS_LOGE(...) wrs_logger_error(&wrs_default_logger, __VA_ARGS__)
 #define WRS_LOGF(...) wrs_logger_fatal(&wrs_default_logger, __VA_ARGS__)
 
+#include "cx_error.h"
 #include "cx_var.h"
 
 // Error codes
@@ -97,13 +98,12 @@ void* wrs_rpc_get_userdata(WrsRpc* rpc);
 // rpc - RPC endpoint
 // remote_name - the name used by remote client to call this local function.
 // local_fn - pointer to local function which will be called.
-// Returns non zero result on errors.
-int wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn local_fn);
+CxError wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn local_fn);
 
 // Unbinds a previously binded local function from the endpoint
 // rpc - RPC endpoint
 // remote_name - the name used by remote client to call this local function.
-int wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name);
+CxError wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name);
 
 // Type for RPC response function
 // rpc - RPC endpoint from which the response arrived
@@ -121,7 +121,7 @@ typedef int (*WrsResponseFn)(WrsRpc* rpc, size_t connid, CxVar* resp);
 // cb - Optional callback to receive response from remote function
 // Returns non zero value on errors.
 // After the function returns, the 'params' CxVar may be destroyed.
-int wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
+CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb);
 
 // Returns information about specified RPC endpoint
 typedef struct WrsRpcInfo {
