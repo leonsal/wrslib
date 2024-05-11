@@ -1,23 +1,14 @@
 #ifndef WRS_H
 #define WRS_H
 
-// Declare or define WRS logger
-#define cx_log_name wrs_logger
-#define cx_log_tsafe
-#ifdef WRS_LOG_IMPLEMENT
-#   define cx_log_implement
-#endif
-#include "cx_log.h"
-#ifndef WRS_LOG_IMPLEMENT
-extern wrs_logger wrs_default_logger;
-#endif
-
+#include "cx_logger.h"
 // Logger utility macros
-#define WRS_LOGD(...) wrs_logger_deb(&wrs_default_logger, __VA_ARGS__)
-#define WRS_LOGI(...) wrs_logger_info(&wrs_default_logger, __VA_ARGS__)
-#define WRS_LOGW(...) wrs_logger_warn(&wrs_default_logger, __VA_ARGS__)
-#define WRS_LOGE(...) wrs_logger_error(&wrs_default_logger, __VA_ARGS__)
-#define WRS_LOGF(...) wrs_logger_fatal(&wrs_default_logger, __VA_ARGS__)
+extern CxLogger* wrs_default_logger;
+#define WRS_LOGD(...) cx_logger_log(wrs_default_logger, CxLoggerDebug, __VA_ARGS__)
+#define WRS_LOGI(...) cx_logger_log(wrs_default_logger, CxLoggerInfo, __VA_ARGS__)
+#define WRS_LOGW(...) cx_logger_log(wrs_default_logger, CxLoggerWarn, __VA_ARGS__)
+#define WRS_LOGE(...) cx_logger_log(wrs_default_logger, CxLoggerError, __VA_ARGS__)
+#define WRS_LOGF(...) cx_logger_log(wrs_default_logger, CxLoggerFatal, __VA_ARGS__)
 
 #include "cx_error.h"
 #include "cx_var.h"

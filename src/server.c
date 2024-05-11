@@ -7,14 +7,14 @@
 #include "civetweb.h"
 #include "zip.h"
 
-#define WRS_LOG_IMPLEMENT
 #include "wrs.h"
 
 #define WRS_SERVER_IMPLEMENT
 #include "server.h"
 
-// Global logger (can be used by dependants)
-wrs_logger wrs_default_logger;
+// Global logger
+// Must be initialized externally by user of the lib
+CxLogger* wrs_default_logger = NULL;
 
 // Forward declarations of local functions
 static int wrs_find_port(Wrs* wrs);

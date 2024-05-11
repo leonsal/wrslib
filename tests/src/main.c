@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "cx_alloc.h"
+#include "cx_logger.h"
 
 #include "argparse.h"
 #include "cli.h"
@@ -39,7 +40,7 @@ typedef struct AppState {
 } AppState;
 
 // Forward declarations
-void log_console_handler(wrs_logger* l, CxLogEvent *ev);
+void log_console_handler(const CxLogger* logger, CxLoggerEvent *ev);
 static CliCmd cmds[];
 static int parse_options(int argc, const char* argv[], AppState* apps);
 static void command_line_loop(AppState* app);
@@ -70,8 +71,9 @@ int main(int argc, const char* argv[]) {
 
     // Initializes WRC logger using special console handler
     // which prints safely above command line being edited
-    wrs_logger_set_flags(&wrs_default_logger, CX_LOG_FLAG_TIME|CX_LOG_FLAG_US|CX_LOG_FLAG_COLOR);
-    wrs_logger_add_handler(&wrs_default_logger, log_console_handler, &app);
+    wrs_default_logger = cx_logger_new(NULL, NULL);
+    cx_logger_set_flags(wrs_default_logger, CxLoggerFlagTime|CxLoggerFlagUs|CxLoggerFlagColor);
+    cx_logger_add_handler(wrs_default_logger, log_console_handler, &app);
     WRS_LOGD("WRT tests");
 
     // Sets server config
@@ -117,18 +119,18 @@ int main(int argc, const char* argv[]) {
     //}
 
     WRS_LOGI("Terminating...");
-    wrs_logger_del_handler(&wrs_default_logger, log_console_handler);
+    cx_logger_del(wrs_default_logger);
     cli_destroy(app.cli);
     wrs_destroy(app.wrs);
     return 0;
 }
 
 // Calls the original cx_log console handler 
-void log_console_handler(wrs_logger* l, CxLogEvent *ev) {
+void log_console_handler(const CxLogger* logger, CxLoggerEvent *ev) {
 
     AppState* app = ev->hdata;
     cli_lock_edit(app->cli);
-    wrs_logger_console_handler(l, ev);
+    cx_logger_console_handler(logger, ev);
     cli_unlock_edit(app->cli);
 }
 
