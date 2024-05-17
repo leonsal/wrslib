@@ -119,9 +119,9 @@ int main(int argc, const char* argv[]) {
     //}
 
     WRS_LOGI("Terminating...");
-    cx_logger_del(wrs_default_logger);
-    cli_destroy(app.cli);
     wrs_destroy(app.wrs);
+    cli_destroy(app.cli);
+    cx_logger_del(wrs_default_logger);
     return 0;
 }
 

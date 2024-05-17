@@ -255,8 +255,9 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     cx_var_set_map_val(msg, "params", params);
     client->cid++;
 
-    // Encodes message
+    // Encodes message and FREE msg CxVar
     CXERROR_RET(wrs_encoder_enc(client->enc, msg));
+    cx_var_del(msg);
 
     // Get encoded message type and buffer
     bool text;
