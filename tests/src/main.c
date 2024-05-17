@@ -442,7 +442,7 @@ static int cmd_test_bin(Cli* cli, void* udata) {
 static void call_test_bin(WrsRpc* rpc, size_t size) {
 
     // Create parameters with non-initialized buffers
-    // NOTE: params will be deallocated by wrs_rpc_call()
+    // MUST be freed after calling wrs_rpc_call()
     CxVar* params = cx_var_new(cx_def_allocator());
     cx_var_set_map(params);
     cx_var_set_map_buf(params, "u32", NULL, size * sizeof(uint32_t));
@@ -468,6 +468,7 @@ static void call_test_bin(WrsRpc* rpc, size_t size) {
     }
 
     CxError err = wrs_rpc_call(rpc, 0, "test_bin", params, resp_test_bin);
+    cx_var_del(params);
     if (err.code) {
         WRS_LOGE("%s: error from wrs_rpc_call()", __func__);
         return;
