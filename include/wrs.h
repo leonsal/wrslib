@@ -76,7 +76,7 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
 // Close previously created RPC endpoint
 // rpc - Pointer to the RPC endpoint
 // Returns non zero error code on errors.
-void  wrs_rpc_close(WrsRpc* rpc);
+void wrs_rpc_close(WrsRpc* rpc);
 
 // Sets user data associated with this RPC endpoint
 void wrs_rpc_set_userdata(WrsRpc* rpc, void* userdata); 

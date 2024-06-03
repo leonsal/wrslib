@@ -1,9 +1,9 @@
 #include <stddef.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
 
+#include "cx_error.h"
 #include "cx_var.h"
 #include "cx_alloc.h"
 #include "cx_pool_allocator.h"
@@ -73,6 +73,7 @@ typedef struct RpcClient {
 
 // WebSocket RPC handler state
 typedef struct WrsRpc {
+    pthread_mutex_t     lock;           // For exclusive access to this state
     Wrs*                wrs;            // Associated server
     const char*         url;            // This websocket handler URL
     uint32_t            max_conns;      // Maximum number of connection
@@ -98,7 +99,7 @@ static void wrs_rpc_free_conn(RpcClient* client);
 
 WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallback cb) {
 
-    assert(pthread_mutex_lock(&wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&wrs->lock));
     WrsRpc* handler = NULL;
 
     // Checks if there is already a handler for this url
@@ -116,6 +117,7 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
         .binds = map_bind_init(0),
         .evcb = cb,
     };
+    CXCHKZ(pthread_mutex_init(&handler->lock, NULL));
 
     // Save association of the url with new handler
     char* url_key = strdup(url);
@@ -126,7 +128,7 @@ WrsRpc* wrs_rpc_open(Wrs* wrs, const char* url, size_t max_conns, WrsEventCallba
         wrs_rpc_connect_handler, wrs_rpc_ready_handler, wrs_rpc_data_handler, wrs_rpc_close_handler, handler);
 
 exit:
-    assert(pthread_mutex_unlock(&wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&wrs->lock));
     return handler;
 }
 
@@ -136,7 +138,7 @@ void wrs_rpc_close(WrsRpc* rpc) {
     // Remove WebSocket handler
     mg_set_websocket_handler(rpc->wrs->ctx, rpc->url, NULL, NULL, NULL, NULL, NULL);
 
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->wrs->lock));
 
     // Destroy all connections
     for (size_t i = 0; i < arr_conn_len(&rpc->conns); i++) {
@@ -150,10 +152,12 @@ void wrs_rpc_close(WrsRpc* rpc) {
     // Destroy bindings
     map_bind_free(&rpc->binds);
 
+    CXCHKZ(pthread_mutex_destroy(&rpc->lock));
+
     // Remove association of url with this RPC handler
     map_rpc_del(&rpc->wrs->rpc_handlers, (char*)rpc->url);
 
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&rpc->wrs->lock));
     free(rpc); 
 }
 
@@ -169,7 +173,7 @@ void* wrs_rpc_get_userdata(WrsRpc* rpc) {
 
 CxError wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
 
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
     CxError err = {};
 
     // Checks if there is already an association in this handler with the specified remote name
@@ -184,13 +188,13 @@ CxError wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
     map_bind_set(&rpc->binds, remote_name_key, (BindInfo){.fn = fn});
 
 exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     return err;
 }
 
 CxError wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
 
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
     CxError err = {};
 
     // Checks if there is already an association in this RPC endpoint with the specified remote name
@@ -203,45 +207,28 @@ CxError wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
     map_bind_del(&rpc->binds, (char*)remote_name);
 
 exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     return err;
-}
-
-CxVar* wrs_rpc_get_params(WrsRpc* rpc, size_t connid) {
-
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
-    CxVar* params = NULL;
-
-    // Checks if this connection id is valid
-    if (connid >= arr_conn_len(&rpc->conns)) {
-        WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
-        goto exit;
-    }
-
-    params = cx_var_new(cx_def_allocator());
-
-exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-    return params;
 }
 
 CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar* params, WrsResponseFn cb) {
 
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
+    CxError error = {0};
 
     // Checks if this connection id is valid
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
-        assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-        return CXERROR(1, "invalid connection id");
+        error = CXERROR(1, "invalid connection id");
+        goto exit;
     }
 
     // Get the RPC client associated with this connection id and checks if it is active.
     RpcClient* client = &rpc->conns.data[connid];
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     if (client->conn == NULL) {
         WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
-        return CXERROR(2, "connection id is closed");
+        error = CXERROR(2, "connection id is closed");
+        goto exit;
     }
   
     // Creates message envelope
@@ -271,7 +258,8 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     mg_unlock_connection((struct mg_connection*)client->conn);
     if (res <= 0) {
         WRS_LOGE("%s: error:%d writing websocket message", __func__, res);
-        return CXERROR(3, "error to writing websocket");
+        error = CXERROR(3, "error to writing websocket");
+        goto exit;
     }
 
     // If callback supplied, saves information to map response to the callback
@@ -281,17 +269,22 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
         map_resp_set(&client->responses, cid, rinfo);
         //WRS_LOGD("%s: map_resp_len:%zu", __func__, map_resp_count(&client->responses));
     }
-    return CXERROR_OK();
+
+exit:
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
+    return error;
 }
 
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
 
     WrsRpcInfo info = {0};
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
+
     info.url = rpc->url;
     info.nconns = rpc->nconns;
     info.max_connid = arr_conn_len(&rpc->conns);
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     return info;
 }
 
@@ -306,7 +299,7 @@ WrsRpcInfo wrs_rpc_info(WrsRpc* rpc) {
 static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_data) {
 
     WrsRpc* rpc = user_data;
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
     int res = 0;
 
     // If maximum number of connections reached, returns 1 to close the connection.
@@ -348,7 +341,7 @@ static int wrs_rpc_connect_handler(const struct mg_connection *conn, void *user_
     mg_set_user_connection_data(conn, (void*)(connid));
 
 exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     // Calls user handler if defined and if no errors occurred.
     if (res == 0 && rpc->evcb) {
         rpc->evcb(rpc, connid, WrsEventOpen);
@@ -374,22 +367,23 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 
     WrsRpc* rpc = user_data;
     uintptr_t connid = (uintptr_t)mg_get_user_connection_data(conn);
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
+    int keep_open = 1;
 
     // Checks connection id and closes connection if invalid.
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: message received with invalid connid:%zu", __func__, connid);
-        assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
-        return 0; // CLOSE
+        keep_open = 0;  // Close connection
+        goto exit; 
     }
 
     // Get the RPC client associated with this connection and
     // closes connection if client is not opened.
     RpcClient* client = &rpc->conns.data[connid];
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
     if (client->conn == NULL) {
         WRS_LOGW("%s: message received for closed connid:%zu", __func__, connid);
-        return 0; // CLOSE
+        keep_open = 0;    // Close connection
+        goto exit; 
     }
 
     // Saves first opcode of fragment group
@@ -404,7 +398,8 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     if (!is_final || is_cont) {
         arru8_pushn(&client->rxbytes, data, data_size);
         if (!is_final) {
-            return 1; // Returns to receive more fragments
+            keep_open = 1;    // Keep connection open and returns to get more fragments
+            goto exit;
         }
     }
     const int frame_flags = client->opcode & WEBSOCKET_OP_MASK;
@@ -418,7 +413,8 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
         text = false;
     } else {
         WRS_LOGW("%s: WebSocket msg type:%d ignored", __func__, frame_flags);
-        return 1;
+        keep_open = 1;    // Keep connection open
+        goto exit;
     }
 
     // Sets the pointer and length of message to decode, depending on
@@ -437,14 +433,16 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     if (err.code) {
         cx_pool_allocator_clear(client->rxalloc);
         WRS_LOGE("%s: error decoding message", __func__);
-        return 1; // DO NOT CLOSE
+        keep_open = 0;  // Close connection
+        goto exit; 
     }
 
     // Try to process this message as remote call
     int res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
     if (res == 0) {
         cx_pool_allocator_clear(client->rxalloc);
-        return 1;
+        keep_open = 1;    // Keep connection open
+        goto exit;
     }
 
     // Try to process this message as response from previous local call.
@@ -452,12 +450,19 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
         res = wrs_rpc_response_handler(rpc, client, connid,rxmsg);
         cx_pool_allocator_clear(client->rxalloc);
         if (res == 0) {
-            return 1;
+            keep_open = 1;    // Keep connection open
+            goto exit;
         }
     }
-    // Close connection
+
+    // Received invalid message
     WRS_LOGE("%s: received invalid message", __func__);
-    return 0;
+    keep_open = 0;    // Close connection
+    goto exit;
+
+exit:
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
+    return keep_open;
 }
 
 // Called by RPC data handler to process remote calls.
@@ -578,7 +583,7 @@ static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_d
     int res = 0;
 
     // Checks if this connection id is valid
-    assert(pthread_mutex_lock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
         res = 1;
@@ -598,7 +603,7 @@ static void wrs_rpc_close_handler(const struct mg_connection *conn, void *user_d
     rpc->nconns--;
 
 exit:
-    assert(pthread_mutex_unlock(&rpc->wrs->lock) == 0);
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     // Calls user handler if defined and if no errors occurred.
     if (res == 0 && rpc->evcb) {
         rpc->evcb(rpc, connid, WrsEventClose);
