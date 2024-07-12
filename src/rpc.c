@@ -243,8 +243,11 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     client->cid++;
 
     // Encodes message and free
-    CXERROR_RET(wrs_encoder_enc(client->enc, msg));
+    error = wrs_encoder_enc(client->enc, msg);
     cx_var_del(msg);
+    if (error.code) {
+        goto exit;
+    }
 
     // Get encoded message type and buffer
     bool text;
@@ -438,7 +441,9 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
     }
 
     // Try to process this message as remote call
+    CXCHKZ(pthread_mutex_unlock(&rpc->lock));
     int res = wrs_rpc_call_handler(rpc, client, connid, rxmsg);
+    CXCHKZ(pthread_mutex_lock(&rpc->lock));
     if (res == 0) {
         cx_pool_allocator_clear(client->rxalloc);
         keep_open = 1;    // Keep connection open
@@ -447,7 +452,9 @@ static int wrs_rpc_data_handler(struct mg_connection *conn, int opcode, char *da
 
     // Try to process this message as response from previous local call.
     if (res == 1) {
+        CXCHKZ(pthread_mutex_unlock(&rpc->lock));
         res = wrs_rpc_response_handler(rpc, client, connid,rxmsg);
+        CXCHKZ(pthread_mutex_lock(&rpc->lock));
         cx_pool_allocator_clear(client->rxalloc);
         if (res == 0) {
             keep_open = 1;    // Keep connection open
