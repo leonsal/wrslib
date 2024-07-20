@@ -115,8 +115,9 @@ int main(int argc, const char* argv[]) {
     //     webkit_start(argc, (char**)argv, "http://localhost:8888");
     // } else {
         // Blocks processing commands
-        command_line_loop(&app);
+        //command_line_loop(&app);
     //}
+    getc(stdin);
 
     WRS_LOGI("Terminating...");
     wrs_destroy(app.wrs);

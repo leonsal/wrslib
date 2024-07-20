@@ -59,6 +59,7 @@ target_compile_definitions(civetweb PRIVATE
     NO_SSL
     USE_WEBSOCKET
     REENTRANT_TIME
+    #STOP_FLAG_NEEDS_LOCK
 )
 
 set(SOURCES

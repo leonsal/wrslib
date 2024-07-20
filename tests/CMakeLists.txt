@@ -42,12 +42,25 @@ set(SOURCES
 
 add_subdirectory(.. wrs)
 add_executable(tests ${SOURCES})
+
 target_include_directories(tests
     PUBLIC ${incbin_SOURCE_DIR}
     PUBLIC ${linenoise_SOURCE_DIR}
+    PUBLIC ${argparse_SOURCE_DIR}
     # PUBLIC ${gtk_INCLUDE_DIRS}
     # PUBLIC ${webkit_INCLUDE_DIRS}
 )
+
 set_property(TARGET tests PROPERTY C_STANDARD  11)
-target_compile_options(tests PRIVATE -Wall -Wno-unused-function)
-target_link_libraries(tests wrs argparse ${webkit_LIBRARIES} ${gtk_LIBRARIES})
+
+target_compile_options(tests PRIVATE
+    -Wall
+    -Wno-unused-function
+)
+
+target_link_libraries(tests
+    wrs
+    argparse_static
+    # ${webkit_LIBRARIES}
+    # ${gtk_LIBRARIES}
+)
