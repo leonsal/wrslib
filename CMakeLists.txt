@@ -33,17 +33,32 @@ CPMAddPackage(
 CPMAddPackage(
     NAME civetweb
     GITHUB_REPOSITORY civetweb/civetweb
-    GIT_TAG master # OR v1.16
-    OPTIONS
-        "CIVETWEB_ENABLE_DEBUG_TOOLS OFF"
-        "CIVETWEB_ENABLE_CXX OFF"
-        "CIVETWEB_BUILD_TESTING OFF"
-        "CIVETWEB_ENABLE_SSL OFF"
-        "CIVETWEB_ENABLE_SERVER_EXECUTABLE OFF"
-        "CIVETWEB_INSTALL_EXECUTABLE OFF"
-        "CIVETWEB_ENABLE_WEBSOCKETS ON"
-        "CIVETWEB_ENABLE_ASAN OFF"
-        "CIVETWEB_ENABLE_KEEPALIVE ON"
+    GIT_TAG master
+    DOWNLOAD_ONLY YES
+)
+
+#
+# Builds library with civetweb sources
+#
+add_library(civetweb 
+    ${civetweb_SOURCE_DIR}/src/civetweb.c
+    ${civetweb_SOURCE_DIR}/src/md5.inl
+    ${civetweb_SOURCE_DIR}/src/sha1.inl
+    ${civetweb_SOURCE_DIR}/src/handle_form.inl
+    ${civetweb_SOURCE_DIR}/src/response.inl
+    ${civetweb_SOURCE_DIR}/src/sort.inl
+    ${civetweb_SOURCE_DIR}/src/match.inl
+    ${civetweb_SOURCE_DIR}/src/timer.inl
+)
+
+target_include_directories(civetweb
+    PRIVATE ${civetweb_SOURCE_DIR}/include
+)
+
+target_compile_definitions(civetweb PRIVATE
+    NO_SSL
+    USE_WEBSOCKET
+    REENTRANT_TIME
 )
 
 set(SOURCES
@@ -60,5 +75,8 @@ target_include_directories(wrs
     PUBLIC ${cxlib_SOURCE_DIR}/include
     PUBLIC ${civetweb_SOURCE_DIR}/include
 )
-target_link_libraries(wrs cxlib civetweb-c-library zip m)
+target_compile_definitions(wrs PRIVATE
+    REENTRANT_TIME=1
+)
+target_link_libraries(wrs cxlib civetweb zip m)
 
