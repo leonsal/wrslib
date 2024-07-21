@@ -131,7 +131,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
 }
 
 
-// Stops and destroy previously create wrs server
+// Stops and destroy previously created wrs server
 void  wrs_destroy(Wrs* wrs) {
 
     mg_stop(wrs->ctx);
@@ -155,7 +155,7 @@ void  wrs_destroy(Wrs* wrs) {
         zip_close(wrs->zip);
     }
     assert(pthread_mutex_destroy(&wrs->lock) == 0);
-    free(wrs);
+    cx_alloc_free(NULL, wrs, sizeof(Wrs));
 }
 
 //-----------------------------------------------------------------------------
