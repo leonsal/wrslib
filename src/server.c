@@ -3,13 +3,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
-
+#include "zip.h"
 #include "cx_alloc.h"
 #include "civetweb.h"
-#include "zip.h"
-
 #include "wrs.h"
-
 #define WRS_SERVER_IMPLEMENT
 #include "server.h"
 

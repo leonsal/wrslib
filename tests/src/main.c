@@ -74,7 +74,7 @@ int main(int argc, const char* argv[]) {
     CxLogger* logger = wrs_logger_init(NULL, "WRS");
     cx_logger_set_flags(logger, CxLoggerFlagTime|CxLoggerFlagUs|CxLoggerFlagColor);
     cx_logger_add_handler(logger, log_console_handler, &app);
-    WRS_LOGD("WRT tests");
+    WRS_LOGD("WRS tests");
 
     // Sets server config
     WrsConfig cfg = {
@@ -111,14 +111,11 @@ int main(int argc, const char* argv[]) {
     CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
     CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
 
-    // if (app.webkit) {
-    //     webkit_start(argc, (char**)argv, "http://localhost:8888");
-    // } else {
-        // Blocks processing commands
-        //command_line_loop(&app);
-    //}
-    getc(stdin);
+    // Blocks processing commands
+    command_line_loop(&app);
+    //getc(stdin);
 
+    // Terminates application
     WRS_LOGI("Terminating...");
     wrs_destroy(app.wrs);
     cli_destroy(app.cli);

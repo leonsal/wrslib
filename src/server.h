@@ -30,7 +30,7 @@
 #endif
 #include "cx_hmap.h"
 
-// WRC server internal state
+// WRS server internal state
 typedef struct Wrs {
     WrsConfig           cfg;            // Copy of user configuration
     arr_opt             options;        // Array of server options
