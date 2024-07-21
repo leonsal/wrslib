@@ -1,15 +1,18 @@
 cmake_minimum_required(VERSION 3.16 FATAL_ERROR)
+
 project(wrslib C)
 
-#
-# Dependencies
-#
+
+# Use CMake Package Manager for external dependencies
+# https://github.com/cpm-cmake/CPM.cmake
 include(cmake/CPM.cmake)
+
 CPMAddPackage(
     NAME cxlib
     GITHUB_REPOSITORY leonsal/cxlib
     GIT_TAG main
 )
+
 CPMAddPackage(
     NAME libzip
     GITHUB_REPOSITORY nih-at/libzip
@@ -76,8 +79,10 @@ target_include_directories(wrs
     PUBLIC ${cxlib_SOURCE_DIR}/include
     PUBLIC ${civetweb_SOURCE_DIR}/include
 )
-target_compile_definitions(wrs PRIVATE
-    REENTRANT_TIME=1
+target_link_libraries(wrs
+    cxlib
+    civetweb
+    zip
+    m
 )
-target_link_libraries(wrs cxlib civetweb zip m)
 
