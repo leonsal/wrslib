@@ -2,14 +2,6 @@
 #define WRS_H
 
 #include "cx_logger.h"
-// Logger utility macros
-extern CxLogger* wrs_default_logger;
-#define WRS_LOGD(...) cx_logger_log(wrs_default_logger, CxLoggerDebug, __VA_ARGS__)
-#define WRS_LOGI(...) cx_logger_log(wrs_default_logger, CxLoggerInfo, __VA_ARGS__)
-#define WRS_LOGW(...) cx_logger_log(wrs_default_logger, CxLoggerWarn, __VA_ARGS__)
-#define WRS_LOGE(...) cx_logger_log(wrs_default_logger, CxLoggerError, __VA_ARGS__)
-#define WRS_LOGF(...) cx_logger_log(wrs_default_logger, CxLoggerFatal, __VA_ARGS__)
-
 #include "cx_error.h"
 #include "cx_var.h"
 
@@ -36,6 +28,12 @@ typedef struct WrsConfig {
         char    cmd_line[512];          // Browser command line without URL
     } browser;
 } WrsConfig;
+
+// Initialize internal logger
+CxLogger* wrs_logger_init(const CxAllocator* alloc, const char*  prefix);
+
+// Returns internal logger
+CxLogger* wrs_logger(void);
 
 // Creates and starts WRS server with the specified configuration.
 // Returns NULL on error.
@@ -120,6 +118,13 @@ typedef struct WrsRpcInfo {
     size_t  max_connid;     // Maximum valid connection id
 } WrsRpcInfo;
 WrsRpcInfo wrs_rpc_info(WrsRpc* rpc);
+
+// Logger utility macros
+#define WRS_LOGD(...) cx_logger_log(wrs_logger(), CxLoggerDebug, __VA_ARGS__)
+#define WRS_LOGI(...) cx_logger_log(wrs_logger(), CxLoggerInfo, __VA_ARGS__)
+#define WRS_LOGW(...) cx_logger_log(wrs_logger(), CxLoggerWarn, __VA_ARGS__)
+#define WRS_LOGE(...) cx_logger_log(wrs_logger(), CxLoggerError, __VA_ARGS__)
+#define WRS_LOGF(...) cx_logger_log(wrs_logger(), CxLoggerFatal, __VA_ARGS__)
 
 #endif
 

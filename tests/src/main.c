@@ -71,9 +71,9 @@ int main(int argc, const char* argv[]) {
 
     // Initializes WRC logger using special console handler
     // which prints safely above command line being edited
-    wrs_default_logger = cx_logger_new(NULL, NULL);
-    cx_logger_set_flags(wrs_default_logger, CxLoggerFlagTime|CxLoggerFlagUs|CxLoggerFlagColor);
-    cx_logger_add_handler(wrs_default_logger, log_console_handler, &app);
+    CxLogger* logger = wrs_logger_init(NULL, "WRS");
+    cx_logger_set_flags(logger, CxLoggerFlagTime|CxLoggerFlagUs|CxLoggerFlagColor);
+    cx_logger_add_handler(logger, log_console_handler, &app);
     WRS_LOGD("WRT tests");
 
     // Sets server config
@@ -122,7 +122,7 @@ int main(int argc, const char* argv[]) {
     WRS_LOGI("Terminating...");
     wrs_destroy(app.wrs);
     cli_destroy(app.cli);
-    cx_logger_del(wrs_default_logger);
+    cx_logger_del(wrs_logger());
     return 0;
 }
 

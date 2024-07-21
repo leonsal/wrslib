@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+#include "cx_alloc.h"
 #include "civetweb.h"
 #include "zip.h"
 
@@ -13,8 +14,7 @@
 #include "server.h"
 
 // Global logger
-// Must be initialized externally by user of the lib
-CxLogger* wrs_default_logger = NULL;
+static CxLogger* glogger = NULL;
 
 // Forward declarations of local functions
 static int wrs_find_port(Wrs* wrs);
@@ -22,14 +22,29 @@ static int wrs_zip_file_handler(struct mg_connection *conn, void *cbdata);
 static int wrs_start_browser(Wrs* wrs);
 
 
+CxLogger* wrs_logger_init(const CxAllocator* alloc, const char*  prefix) {
+
+    if (glogger) {
+        cx_logger_del(glogger);
+    }
+    glogger = cx_logger_new(alloc, prefix);
+    return glogger;
+}
+
+CxLogger* wrs_logger(void) {
+
+    return glogger;
+}
+
 Wrs* wrs_create(const WrsConfig* cfg) {
 
-    // Creates and initializes internal state
-    Wrs* wrs = malloc(sizeof(Wrs));
-    if (wrs == NULL) {
-        return NULL;
+    // Initialize logger if necessary
+    if (glogger == NULL) {
+        wrs_logger_init(NULL, "WRS");
     }
-    memset(wrs, 0, sizeof(Wrs));
+
+    // Creates and initializes internal state
+    Wrs* wrs = cx_alloc_mallocz(NULL, sizeof(Wrs));
     wrs->cfg = *cfg;
     wrs->rpc_handlers = map_rpc_init(0);
     assert(pthread_mutex_init(&wrs->lock, NULL) == 0);
@@ -52,6 +67,7 @@ Wrs* wrs_create(const WrsConfig* cfg) {
         strcpy(document_root, cfg->document_root);
         arr_opt_push(&wrs->options, document_root);
     }
+
     // Sets listening port
     const size_t size = 32;
     char* listening_ports = malloc(size);
