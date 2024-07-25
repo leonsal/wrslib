@@ -10,8 +10,7 @@ include(cmake/CPM.cmake)
 CPMAddPackage(
     NAME cxlib
     GITHUB_REPOSITORY leonsal/cxlib
-    #GIT_TAG main
-    GIT_TAG cxerror
+    GIT_TAG main
 )
 
 CPMAddPackage(
