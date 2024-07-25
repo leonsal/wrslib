@@ -101,15 +101,15 @@ int main(int argc, const char* argv[]) {
     // Creates RPC 1
     app.rpc1 = wrs_rpc_open(app.wrs, "/rpc1", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc1, &app);
-    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
-    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
-    CXERROR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
+    CXERR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_text_msg", rpc_server_text_msg));
+    CXERR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_bin_msg", rpc_server_bin_msg));
+    CXERR_CHK(wrs_rpc_bind(app.rpc1, "rpc_server_exit", rpc_server_exit));
 
     // Creates RPC 2
     app.rpc2 = wrs_rpc_open(app.wrs, "/rpc2", 2, rpc_event);
     wrs_rpc_set_userdata(app.rpc2, &app);
-    CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
-    CXERROR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
+    CXERR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_set", rpc_server_audio_set));
+    CXERR_CHK(wrs_rpc_bind(app.rpc2, "rpc_server_audio_run", rpc_server_audio_run));
 
     // Blocks processing commands
     command_line_loop(&app);

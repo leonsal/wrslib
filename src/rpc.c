@@ -179,7 +179,7 @@ CxError wrs_rpc_bind(WrsRpc* rpc, const char* remote_name, WrsRpcFn fn) {
     // Checks if there is already an association in this handler with the specified remote name
     BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind) {
-        err = CXERROR(1, "binding already exists");
+        err = CXERR("binding already exists");
         goto exit;
     }
 
@@ -200,7 +200,7 @@ CxError wrs_rpc_unbind(WrsRpc* rpc, const char* remote_name) {
     // Checks if there is already an association in this RPC endpoint with the specified remote name
     BindInfo* bind = map_bind_get(&rpc->binds, (char*)remote_name);
     if (bind == NULL) {
-        err = CXERROR(1, "binding not found");
+        err = CXERR("binding not found");
         goto exit;
     }
 
@@ -219,7 +219,7 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     // Checks if this connection id is valid
     if (connid >= arr_conn_len(&rpc->conns)) {
         WRS_LOGW("%s: connection:%zu is invalid", __func__, connid);
-        error = CXERROR(1, "invalid connection id");
+        error = CXERR("invalid connection id");
         goto exit;
     }
 
@@ -227,7 +227,7 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     RpcClient* client = &rpc->conns.data[connid];
     if (client->conn == NULL) {
         WRS_LOGW("%s: connection:%zu closed with no associated client", __func__, connid);
-        error = CXERROR(2, "connection id is closed");
+        error = CXERR("connection id is closed");
         goto exit;
     }
   
@@ -261,7 +261,7 @@ CxError wrs_rpc_call(WrsRpc* rpc, size_t connid, const char* remote_name, CxVar*
     mg_unlock_connection((struct mg_connection*)client->conn);
     if (res <= 0) {
         WRS_LOGE("%s: error:%d writing websocket message", __func__, res);
-        error = CXERROR(3, "error to writing websocket");
+        error = CXERR("error to writing websocket");
         goto exit;
     }
 
